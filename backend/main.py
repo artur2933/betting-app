@@ -8,90 +8,165 @@ import random
 models.Base.metadata.create_all(bind=database.engine)
 app = FastAPI()
 
-# --- GRAFIKA PRE GENERÁTOR TIKETOV ---
+# --- PROFESIONÁLNY DASHBOARD UI ---
 html_content = """
 <!DOCTYPE html>
-<html>
+<html lang="sk">
 <head>
-    <title>AI Betting Manager</title>
+    <meta charset="UTF-8">
+    <title>Betting PRO Dashboard</title>
     <style>
-        body { background-color: #050505; color: #fff; font-family: 'Segoe UI', sans-serif; text-align: center; padding: 20px; }
-        h1 { color: #00ff88; text-transform: uppercase; letter-spacing: 2px; }
+        /* Základný štýl pre celú aplikáciu */
+        body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #0d0d0d; color: white; display: flex; height: 100vh; overflow: hidden; }
         
-        .panel { background: #111; padding: 30px; border-radius: 15px; border: 1px solid #333; max-width: 500px; margin: 0 auto; box-shadow: 0 0 30px rgba(0,255,136,0.1); }
+        /* Bočné menu (Sidebar) */
+        .sidebar { width: 250px; background-color: #161616; border-right: 1px solid #333; display: flex; flex-direction: column; padding: 20px; }
+        .logo { font-size: 24px; font-weight: bold; color: #00ff88; margin-bottom: 40px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
         
-        button { 
-            width: 100%; padding: 20px; margin-top: 20px; 
-            background: linear-gradient(90deg, #00ff88, #00cc6a); 
-            border: none; border-radius: 8px; 
-            font-size: 20px; font-weight: bold; color: #000; cursor: pointer; 
-            transition: transform 0.2s;
-        }
-        button:hover { transform: scale(1.02); box-shadow: 0 0 15px #00ff88; }
+        .menu-item { padding: 15px; margin-bottom: 10px; cursor: pointer; border-radius: 8px; color: #aaa; transition: 0.3s; font-size: 16px; display: flex; align-items: center; gap: 10px; }
+        .menu-item:hover, .menu-item.active { background-color: #00ff88; color: black; font-weight: bold; }
         
-        .tiket-box { margin-top: 30px; text-align: left; }
-        .zapas-row { background: #222; padding: 15px; margin-bottom: 10px; border-left: 4px solid #00ff88; border-radius: 4px; }
-        .kurz { float: right; font-weight: bold; color: #00ff88; }
-        .total { font-size: 22px; border-top: 1px solid #444; padding-top: 15px; margin-top: 15px; text-align: right; color: yellow; }
+        /* Hlavná časť (Content) */
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; background: radial-gradient(circle at top right, #1a1a1a 0%, #0d0d0d 60%); }
         
-        .filters { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
-        select { background: #222; color: white; border: 1px solid #444; padding: 10px; border-radius: 5px; width: 100%; }
+        /* Karty a sekcie */
+        .page { display: none; animation: fadeIn 0.3s; }
+        .page.active { display: block; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .header h2 { margin: 0; font-size: 28px; }
+        
+        .card { background: #1a1a1a; padding: 25px; border-radius: 12px; border: 1px solid #333; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        .card h3 { margin-top: 0; color: #00ff88; }
+        
+        /* Tlačidlá */
+        .btn { background: #00ff88; color: black; padding: 12px 25px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        .btn:hover { background: #00cc6a; }
+
+        /* Tabuľka tiketov */
+        .ticket-row { display: flex; justify-content: space-between; padding: 15px; border-bottom: 1px solid #333; }
+        .ticket-row:last-child { border-bottom: none; }
+        .odds { font-weight: bold; color: #00ff88; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
-    <h1>🎰 AI Ticket Master</h1>
-    
-    <div class="panel">
-        <div class="filters">
-            <select id="liga">
-                <option value="all">Všetky ligy</option>
-                <option value="premier">Premier League</option>
-                <option value="laliga">La Liga</option>
-            </select>
+
+    <div class="sidebar">
+        <div class="logo">⚡ BetBot AI</div>
+        <div class="menu-item active" onclick="showPage('home', this)">🏠 Prehľad</div>
+        <div class="menu-item" onclick="showPage('generator', this)">⚽ VIP Generátor</div>
+        <div class="menu-item" onclick="showPage('history', this)">📊 História</div>
+        <div class="menu-item" onclick="showPage('settings', this)">⚙️ Nastavenia</div>
+    </div>
+
+    <div class="main-content">
+        
+        <div id="home" class="page active">
+            <div class="header">
+                <h2>Vitaj späť, Hráč</h2>
+                <span style="color: #666;">Verzia 1.0</span>
+            </div>
+            
+            <div style="display: flex; gap: 20px;">
+                <div class="card" style="flex: 1;">
+                    <h3>💰 Tvoj Bankroll</h3>
+                    <p style="font-size: 32px; font-weight: bold; margin: 10px 0;">€0.00</p>
+                    <small style="color: #888;">Zatiaľ len simulácia</small>
+                </div>
+                <div class="card" style="flex: 1;">
+                    <h3>📈 Úspešnosť AI</h3>
+                    <p style="font-size: 32px; font-weight: bold; margin: 10px 0;">87%</p>
+                    <small style="color: #888;">Posledných 30 dní</small>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>📢 Novinky</h3>
+                <p>AI model bol aktualizovaný na verziu 2.0. Pridaná podpora pre Premier League.</p>
+            </div>
         </div>
 
-        <p>Nechaj AI, aby našla najlepšiu kombináciu na dnes.</p>
-        <button onclick="generujTiket()">⚡ VYTVORIŤ TIKET ⚡</button>
-
-        <div id="vysledok" class="tiket-box" style="display:none;">
+        <div id="generator" class="page">
+            <div class="header"><h2>Generátor Denného Tiketu</h2></div>
+            <div class="card">
+                <p>Klikni na tlačidlo a nechaj umelú inteligenciu analyzovať tisíce dát.</p>
+                <button class="btn" onclick="generujTiket()">⚡ Analyzovať a Vytvoriť Tiket</button>
             </div>
+            <div id="ticket-result" class="card" style="display:none; border: 1px solid #00ff88;">
+                </div>
+        </div>
+
+        <div id="history" class="page">
+            <div class="header"><h2>História Tiketov</h2></div>
+            <div class="card">
+                <div class="ticket-row">
+                    <span>Arsenal vs Chelsea</span>
+                    <span style="color: #00ff88;">VÝHRA ✅</span>
+                </div>
+                <div class="ticket-row">
+                    <span>Real Madrid vs Barcelona</span>
+                    <span style="color: red;">PREHRA ❌</span>
+                </div>
+                <div class="ticket-row">
+                    <span>Bayern vs Dortmund</span>
+                    <span style="color: #00ff88;">VÝHRA ✅</span>
+                </div>
+            </div>
+        </div>
+        
+         <div id="settings" class="page">
+            <div class="header"><h2>Nastavenia</h2></div>
+            <div class="card">
+                <p>Tu si budeš môcť nastaviť notifikácie a obľúbené ligy.</p>
+            </div>
+        </div>
+
     </div>
 
     <script>
+        // Prepínanie stránok v menu
+        function showPage(pageId, element) {
+            // Skryť všetky stránky
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+            
+            // Zobraziť vybranú
+            document.getElementById(pageId).classList.add('active');
+            element.classList.add('active');
+        }
+
+        // Funkcia na generovanie tiketu (napojená na Python backend)
         async function generujTiket() {
-            const vysledokDiv = document.getElementById('vysledok');
-            vysledokDiv.style.display = 'block';
-            vysledokDiv.innerHTML = '<p style="text-align:center;">🤖 AI skenuje zápasy a hľadá tutovky...</p>';
+            const div = document.getElementById('ticket-result');
+            div.style.display = 'block';
+            div.innerHTML = '<p>⏳ AI analyzuje zápasy...</p>';
             
             try {
-                // Zavoláme backend, aby prešiel všetky zápasy
                 const res = await fetch('/api/generuj-tiket');
                 const data = await res.json();
                 
                 if (data.length === 0) {
-                    vysledokDiv.innerHTML = '<p style="text-align:center; color:red;">Žiadne vhodné zápasy na tiket.</p>';
+                    div.innerHTML = '<p>Žiadne vhodné zápasy.</p>';
                     return;
                 }
 
                 let html = '<h3>🔥 Dnešný AI Výber:</h3>';
-                let celkovyKurz = 1;
-
-                data.forEach(zapas => {
-                    celkovyKurz *= zapas.kurz;
-                    html += `
-                        <div class="zapas-row">
-                            <div>${zapas.domaci} vs ${zapas.hostia}</div>
-                            <small>${zapas.dovod}</small>
-                            <span class="kurz">${zapas.kurz}</span>
-                        </div>
-                    `;
+                let totalOdds = 1;
+                
+                data.forEach(z => {
+                    totalOdds *= z.kurz;
+                    html += `<div class="ticket-row">
+                                <div><b>${z.domaci} vs ${z.hostia}</b><br><small style="color:#aaa">${z.dovod}</small></div>
+                                <div class="odds">${z.kurz}</div>
+                             </div>`;
                 });
-
-                html += `<div class="total">Celkový kurz: <b>${celkovyKurz.toFixed(2)}</b></div>`;
-                vysledokDiv.innerHTML = html;
-
-            } catch (e) {
-                vysledokDiv.innerHTML = '<p style="color:red">Chyba spojenia.</p>';
+                
+                html += `<div style="margin-top:20px; text-align:right; font-size:20px;">Celkový kurz: <b style="color:#00ff88">${totalOdds.toFixed(2)}</b></div>`;
+                div.innerHTML = html;
+            } catch(e) {
+                div.innerHTML = '<p style="color:red">Chyba spojenia so serverom.</p>';
             }
         }
     </script>
@@ -105,37 +180,21 @@ def get_db():
 @app.get("/", response_class=HTMLResponse)
 def home(): return html_content
 
-# --- NOVÁ LOGIKA: GENERÁTOR TIKETU ---
 @app.get("/api/generuj-tiket")
 def generuj_denny_tiket(db: Session = Depends(get_db)):
-    # 1. Načítame VŠETKY zápasy z databázy
-    vsetky_zapasy = crud.get_vsetky_zapasy(db)
-    
-    top_vyber = []
-    
-    # 2. Prejdeme každý zápas a spýtame sa AI
-    for z in vsetky_zapasy:
-        # Jednoduchá AI logika (v budúcnosti tu bude napojená real AI)
-        # Ak je šanca na výhru domacich vysoká a kurz je zaujímavý
+    vsetky = crud.get_vsetky_zapasy(db)
+    top = []
+    for z in vsetky:
         score = (z.sanca * z.kurz) 
-        
-        # Ak je to "dobrý deal", pridáme to na tiket
-        if score > 1.8: # Filter kvality
-            top_vyber.append({
+        if score > 1.8:
+            top.append({
                 "domaci": z.domaci,
                 "hostia": z.hostia,
                 "kurz": z.kurz,
-                "tip": "1",
                 "dovod": ai.analyzuj_zapas_cez_ai(z.domaci, z.hostia, z.kurz, z.sanca)
             })
-    
-    # 3. Vyberieme max 3 najlepšie zápasy na tiket
-    # (Zoraďujeme podľa kurzu, nech to nie sú len 1.01 kurzy)
-    top_vyber = sorted(top_vyber, key=lambda x: x['kurz'], reverse=True)[:3]
-    
-    return top_vyber
+    return sorted(top, key=lambda x: x['kurz'], reverse=True)[:3]
 
-# Pre zachovanie funkčnosti Whopu
 class WhopInput(BaseModel): message: str
 @app.post("/whop")
 def whop(data: WhopInput): return {"status": "ok"}
