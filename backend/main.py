@@ -4,103 +4,59 @@ from sqlalchemy.orm import Session
 from backend import models, crud, database, ai 
 from pydantic import BaseModel
 
-# Vytvorenie databázy
 models.Base.metadata.create_all(bind=database.engine)
-
 app = FastAPI()
 
-# --- TOTO JE TVOJA NOVÁ GRAFIKA (HTML) ---
 html_content = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Betting AI Bot</title>
+    <title>Betting AI</title>
     <style>
-        body { background-color: #1a1a1a; color: white; font-family: sans-serif; text-align: center; padding: 50px; }
-        h1 { color: #00ff88; }
-        input { padding: 15px; border-radius: 5px; border: none; width: 200px; text-align: center; }
-        button { padding: 15px 30px; background-color: #00ff88; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
-        button:hover { background-color: #00cc6a; }
-        #vysledok { margin-top: 30px; padding: 20px; border: 1px solid #333; display: none; background-color: #252525; border-radius: 10px;}
+        body { background-color: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        h1 { color: #0f0; margin-bottom: 20px; }
+        input { padding: 15px; border-radius: 5px; border: none; width: 250px; text-align: center; font-size: 18px; margin-bottom: 10px;}
+        button { padding: 15px 40px; background-color: #0f0; color: #000; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 18px; }
+        button:hover { background-color: #0c0; }
+        #vysledok { margin-top: 20px; font-size: 20px; border: 1px solid #333; padding: 20px; border-radius: 10px; background: #111; display: none; }
     </style>
 </head>
 <body>
-    <h1>🤖 AI Betting Analytik</h1>
-    <p>Zadaj ID zápasu a nechaj AI rozhodnúť.</p>
-    
-    <input type="number" id="zapasId" placeholder="ID Zápasu (napr. 1)">
+    <h1>🎰 AI Analytik</h1>
+    <input type="number" id="zapasId" placeholder="Zadaj ID zápasu">
     <button onclick="analyzuj()">Analyzovať</button>
-
-    <div id="vysledok">
-        <h3 id="zapasNazov"></h3>
-        <p id="aiNazor" style="font-size: 1.2em;"></p>
-    </div>
+    <div id="vysledok"></div>
 
     <script>
         async function analyzuj() {
             const id = document.getElementById('zapasId').value;
-            const vysledokDiv = document.getElementById('vysledok');
-            
-            if(!id) { alert("Zadaj ID!"); return; }
-
-            vysledokDiv.style.display = "block";
-            document.getElementById('zapasNazov').innerText = "Načítavam...";
-            document.getElementById('aiNazor').innerText = "⏳ AI premýšľa...";
-
+            const div = document.getElementById('vysledok');
+            if(!id) return;
+            div.style.display = 'block';
+            div.innerHTML = '⏳ Premýšľam...';
             try {
-                const response = await fetch(`/analyzuj/${id}`);
-                const data = await response.json();
-                
-                if (data.chyba) {
-                    document.getElementById('zapasNazov').innerText = "Chyba";
-                    document.getElementById('aiNazor').innerText = data.chyba;
-                } else {
-                    document.getElementById('zapasNazov').innerText = data.zapas;
-                    document.getElementById('aiNazor').innerText = data.AI_Analytik_Hovori;
-                }
-            } catch (error) {
-                document.getElementById('aiNazor').innerText = "Chyba pripojenia.";
-            }
+                const res = await fetch(`/analyzuj/${id}`);
+                const data = await res.json();
+                div.innerHTML = data.chyba ? data.chyba : `<b>${data.zapas}</b><br><br>💡 ${data.AI_Analytik_Hovori}`;
+            } catch (e) { div.innerHTML = 'Chyba spojenia.'; }
         }
     </script>
 </body>
 </html>
 """
 
-# Pomocná funkcia pre databázu
 def get_db():
-    db = database.SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    db = database.SessionLocal(); try: yield db; finally: db.close()
 
-# --- TOTO ZOBRAZÍ GRAFIKU NA HLAVNEJ STRÁNKE ---
 @app.get("/", response_class=HTMLResponse)
-def home():
-    return html_content
-
-@app.get("/zapasy")
-def citat_zapasy(db: Session = Depends(get_db)):
-    return crud.get_vsetky_zapasy(db)
+def home(): return html_content
 
 @app.get("/analyzuj/{zapas_id}")
-def spytat_sa_ai(zapas_id: int, db: Session = Depends(get_db)):
-    zapas = db.query(models.Zapas).filter(models.Zapas.id == zapas_id).first()
-    if not zapas:
-        return {"chyba": "Zápas s týmto ID neexistuje."}
-    
-    nazor_ai = ai.analyzuj_zapas_cez_ai(
-        domaci=zapas.domaci, hostia=zapas.hostia,
-        kurz=zapas.kurz, sanca=zapas.sanca
-    )
-    return {"zapas": f"{zapas.domaci} vs {zapas.hostia}", "AI_Analytik_Hovori": nazor_ai}
+def api_analyzuj(zapas_id: int, db: Session = Depends(get_db)):
+    z = db.query(models.Zapas).filter(models.Zapas.id == zapas_id).first()
+    if not z: return {"chyba": "Zápas nenájdený"}
+    return {"zapas": f"{z.domaci} vs {z.hostia}", "AI_Analytik_Hovori": ai.analyzuj_zapas_cez_ai(z.domaci, z.hostia, z.kurz, z.sanca)}
 
-# --- WHOP KOMUNIKÁCIA ---
-class WhopInput(BaseModel):
-    message: str
-    user_id: str | None = None
-
+class WhopInput(BaseModel): message: str
 @app.post("/whop")
-def komunikacia_s_whop(data: WhopInput):
-    return {"response_message": f"AI Analytik: Prijal som správu '{data.message}'"}
+def whop(data: WhopInput): return {"status": "ok"}
