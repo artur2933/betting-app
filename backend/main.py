@@ -73,6 +73,13 @@ html_content = """
         .prediction-value { font-size: 20px; font-weight: bold; color: white; margin-top: 5px; }
         .reason-text { font-size: 14px; color: #ccc; line-height: 1.6; font-style: italic; }
 
+        /* Sekcia Výsledky AI */
+        .result-row { display: flex; justify-content: space-between; padding: 15px; border-bottom: 1px solid #333; align-items: center; }
+        .result-row:last-child { border-bottom: none; }
+        .status-badge { padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: bold; }
+        .win { background: rgba(0, 255, 136, 0.2); color: #00ff88; border: 1px solid #00ff88; }
+        .loss { background: rgba(255, 0, 0, 0.2); color: #ff4444; border: 1px solid #ff4444; }
+
         .page { display: none; }
         .page.active { display: block; animation: fadeIn 0.4s; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -85,7 +92,7 @@ html_content = """
         <div class="logo">⚡ BET PRO</div>
         <div class="menu-item active" onclick="showPage('home', this)">🏠 Dashboard</div>
         <div class="menu-item" onclick="showPage('generator', this)">📊 Analýza Zápasov</div>
-        <div class="menu-item" onclick="showPage('history', this)">📜 História</div>
+        <div class="menu-item" onclick="showPage('results', this)">✅ Výsledky AI</div>
     </div>
 
     <div class="main-content">
@@ -94,20 +101,20 @@ html_content = """
             <div class="header"><h1>Prehľad Trhu</h1></div>
             <div style="display:flex; gap:20px;">
                 <div style="background:#1f2833; padding:20px; flex:1; border-radius:10px;">
-                    <h3>💰 Tvoj Bankroll</h3>
-                    <h1 style="color:#66fcf1">€2,450.00</h1>
-                    <small style="color:#888">Simulovaný stav</small>
+                    <h3>🤖 Úspešnosť AI (Včera)</h3>
+                    <h1 style="color:#66fcf1">3 / 4 (75%)</h1>
+                    <small style="color:#888">Zisk: +2.45 jednotiek</small>
                 </div>
                 <div style="background:#1f2833; padding:20px; flex:1; border-radius:10px;">
-                    <h3>📈 Úspešnosť Modelu</h3>
-                    <h1 style="color:#66fcf1">78.4%</h1>
-                    <small style="color:#888">Posledných 30 dní</small>
+                    <h3>📈 Úspešnosť (Mesiac)</h3>
+                    <h1 style="color:#66fcf1">68.2%</h1>
+                    <small style="color:#888">Stabilný rast</small>
                 </div>
             </div>
             
             <div style="margin-top: 30px; padding: 20px; background: #151b24; border-radius: 10px; border: 1px solid #333;">
-                <h3 style="color: #66fcf1;">📢 Novinky v systéme</h3>
-                <p>Pridaná podpora pre detailné štatistiky xG (Očakávané góly). Prejdi do sekcie <b>Analýza Zápasov</b> a vyskúšaj nový generátor.</p>
+                <h3 style="color: #66fcf1;">📢 Tip na dnes</h3>
+                <p>Nezabudni skontrolovať <b>Analýzu Zápasov</b>. Dnes hrá Manchester United a AI našla zaujímavú hodnotu v kurze.</p>
             </div>
         </div>
 
@@ -127,155 +134,24 @@ html_content = """
             <div id="results"></div>
         </div>
 
-        <div id="history" class="page">
-            <div class="header"><h1>História</h1></div>
-            <p>Zatiaľ žiadne uzavreté tikety.</p>
-        </div>
-
-    </div>
-
-    <script>
-        function showPage(id, el) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-            if(el) el.classList.add('active');
-        }
-
-        async function generujTiket() {
-            const out = document.getElementById('results');
-            const load = document.getElementById('loading');
-            out.innerHTML = '';
-            load.style.display = 'block';
-
-            try {
-                const res = await fetch('/api/generuj-tiket');
-                const data = await res.json();
-                load.style.display = 'none';
-
-                let html = '';
-                data.forEach(m => {
-                    let homePower = m.stats.utok_domaci; 
-                    let awayPower = m.stats.utok_hostia;
-
-                    html += `
-                    <div class="match-card">
-                        <div class="match-header">
-                            <div class="teams">${m.domaci} vs ${m.hostia}</div>
-                            <div class="league">Kurz: ${m.kurz}</div>
+        <div id="results" class="page">
+            <div class="header"><h1>Ako sa darilo AI?</h1></div>
+            <p style="margin-bottom: 20px;">Prehľad tipov, ktoré náš robot vygeneroval za posledných 24 hodín.</p>
+            
+            <div class="match-card">
+                <div class="match-header">
+                    <div class="teams">Včerajšie Tipy</div>
+                    <div class="league">29. Január</div>
+                </div>
+                <div style="padding: 0;">
+                    <div class="result-row">
+                        <div>
+                            <b>Barcelona vs Osasuna</b><br>
+                            <small style="color:#aaa">Tip: Barcelona -1.5 (Handicap)</small>
                         </div>
-                        <div class="match-body">
-                            <div class="stats-col">
-                                <div style="color:#888; margin-bottom:10px; font-size:12px; font-weight:bold;">KĽÚČOVÉ ŠTATISTIKY</div>
-                                
-                                <div class="stat-row">
-                                    <span>Gólový priemer</span>
-                                    <span>${m.stats.goly_priemer}</span>
-                                </div>
-                                <div class="stat-row">
-                                    <span>xG (Očakávané góly)</span>
-                                    <span>${m.stats.xg_data}</span>
-                                </div>
-                                
-                                <div style="margin-top:15px;">
-                                    <div class="stat-row"><span>Sila Útoku (Domáci)</span><span>${homePower}%</span></div>
-                                    <div class="stat-bar"><div class="stat-fill" style="width:${homePower}%"></div></div>
-                                </div>
-                                <div style="margin-top:10px;">
-                                    <div class="stat-row"><span>Sila Útoku (Hostia)</span><span>${awayPower}%</span></div>
-                                    <div class="stat-bar"><div class="stat-fill" style="width:${awayPower}%"></div></div>
-                                </div>
-                            </div>
-
-                            <div class="analysis-col">
-                                <div class="prediction-box">
-                                    <div class="prediction-title">ODPORÚČANÝ TIP</div>
-                                    <div class="prediction-value">${m.tip}</div>
-                                </div>
-                                <div class="reason-text">
-                                    "<b>${m.analyza_titulek}</b>"<br>
-                                    ${m.analyza_text}
-                                </div>
-                            </div>
-                        </div>
+                        <div class="status-badge win">VÝHRA ✅</div>
                     </div>
-                    `;
-                });
-                out.innerHTML = html;
-            } catch(e) { 
-                load.style.display = 'none';
-                alert("Chyba spojenia so serverom."); 
-            }
-        }
-    </script>
-</body>
-</html>
-"""
-
-# 3. BACKEND - OPRAVENÁ SYNTAX A DÁTA
-def get_db():
-    db = database.SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-@app.get("/", response_class=HTMLResponse)
-def home(): 
-    return html_content
-
-@app.get("/api/generuj-tiket")
-def generuj_denny_tiket(db: Session = Depends(get_db)):
-    # Simulácia PROFESIONÁLNYCH DÁT (kým napojíme live API)
-    profesionalne_data = [
-        {
-            "domaci": "Manchester United",
-            "hostia": "PAOK Solún",
-            "kurz": 1.25,
-            "tip": "Manchester zvíťazí a Over 2.5",
-            "stats": {
-                "goly_priemer": "2.4 - 0.8",
-                "xg_data": "1.85 vs 0.42",
-                "utok_domaci": 85,
-                "utok_hostia": 30
-            },
-            "analyza_titulek": "Jasná dominancia na Old Trafford",
-            "analyza_text": "United má doma priemer 18 striel na bránu proti slabším tímom. PAOK má problémy v obrane (inkasovali 5 gólov v posledných 3 zápasoch). Očakávame rýchly gól."
-        },
-        {
-            "domaci": "Lazio Rím",
-            "hostia": "FC Porto",
-            "kurz": 1.75,
-            "tip": "Obaja dajú gól (BTTS)",
-            "stats": {
-                "goly_priemer": "1.8 - 1.9",
-                "xg_data": "1.20 vs 1.35",
-                "utok_domaci": 65,
-                "utok_hostia": 70
-            },
-            "analyza_titulek": "Otvorený ofenzívny futbal",
-            "analyza_text": "Lazio doma skórovalo v 9 z 10 zápasov. Porto má smrtiace protiútoky. Štatistika xG naznačuje, že čisté konto tu neudrží nikto."
-        },
-        {
-            "domaci": "Galatasaray",
-            "hostia": "Tottenham",
-            "kurz": 2.10,
-            "tip": "Viac ako 3.5 gólov",
-            "stats": {
-                "goly_priemer": "3.1 - 2.8",
-                "xg_data": "2.40 vs 2.10",
-                "utok_domaci": 90,
-                "utok_hostia": 88
-            },
-            "analyza_titulek": "Gólová prestrelka v Istanbule",
-            "analyza_text": "Osimhen proti útoku Spurs. Oba tímy ignorujú obranu a hrajú na góly. Posledné zápasy oboch tímov skončili divoko (4:3, 3:2). Value bet na góly."
-        }
-    ]
-    return profesionalne_data
-
-class WhopInput(BaseModel):
-    message: str
-
-@app.post("/whop")
-def whop(data: WhopInput): 
-    return {"status": "ok"}
+                    <div class="result-row">
+                        <div>
+                            <b>Liverpool vs Chelsea</b><br>
+                            <small style="color:#aaa">Tip: Remíza</
