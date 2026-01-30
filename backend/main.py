@@ -94,4 +94,266 @@ html_content = """
         .ai-confidence { background: #66fcf1; color: #000; padding: 5px 15px; border-radius: 5px; font-weight: bold; }
 
         .page { display: none; }
-        .page.active { display: block; animation: fadeIn 0.4s;
+        .page.active { display: block; animation: fadeIn 0.4s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        /* Graf Kontajner */
+        .chart-box { background: #151b24; padding: 25px; border-radius: 16px; border: 1px solid #2c3e50; height: 350px; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="logo">⚡ BET PRO</div>
+        <div class="menu-item active" onclick="showPage('home', this)">🏠 Dashboard</div>
+        <div class="menu-item" onclick="showPage('generator', this)">📊 VIP Analýza</div>
+        <div class="menu-item" onclick="showPage('results-page', this)">✅ Výsledky</div>
+    </div>
+
+    <div class="main-content">
+        
+        <div id="home" class="page active">
+            <div class="header"><h1>Vitaj späť, Trader.</h1></div>
+            
+            <div style="display:flex; gap:20px; margin-bottom: 30px;">
+                <div style="background:#151b24; padding:25px; flex:1; border-radius:16px; border:1px solid #2c3e50;">
+                    <h3 style="color:#888; font-size:14px; margin-top:0;">DNEŠNÝ POTENCIÁL</h3>
+                    <h1 style="color:#fff; font-size:36px; margin:10px 0;">3 Zápasy</h1>
+                    <small style="color:#66fcf1">AI našla vysokú hodnotu (Value)</small>
+                </div>
+                <div style="background:#151b24; padding:25px; flex:1; border-radius:16px; border:1px solid #2c3e50;">
+                    <h3 style="color:#888; font-size:14px; margin-top:0;">BANKROLL (Simulácia)</h3>
+                    <h1 style="color:#fff; font-size:36px; margin:10px 0;">€2,450.00</h1>
+                    <small style="color:#2ecc71">▲ +12.5% tento týždeň</small>
+                </div>
+            </div>
+            
+            <div class="chart-box">
+                <h3 style="color:#fff; margin-top:0;">Vývoj Zisku</h3>
+                <canvas id="profitChart"></canvas>
+            </div>
+        </div>
+
+        <div id="generator" class="page">
+            <div class="header"><h1>Deep AI Analysis</h1></div>
+            
+            <div style="text-align:center; margin-bottom:40px;">
+                <p style="color:#888; margin-bottom:20px;">Spusti hĺbkový sken zápasov. AI analyzuje formu, xG, zranenia a pohyby kurzov.</p>
+                <button class="btn-analyze" onclick="generujTiket()">SPUSTIŤ SKENOVANIE</button>
+            </div>
+
+            <div id="loading" style="display:none; text-align:center; color:#66fcf1; margin-top: 50px;">
+                <h2 style="font-weight:300;">⏳ Analyzujem milióny dátových bodov...</h2>
+                <p>Pripravujem report...</p>
+            </div>
+
+            <div id="ticket-output"></div>
+        </div>
+
+        <div id="results-page" class="page">
+            <div class="header"><h1>Výkonnosť Modelu</h1></div>
+            <p>História posledných AI predikcií.</p>
+            <div class="match-card">
+                <div class="match-header"><div class="teams-title">Včerajší Výkon</div></div>
+                <div class="match-body"><p style="color:#aaa;">Načítavam dáta...</p></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Graf
+        document.addEventListener("DOMContentLoaded", function() {
+            const ctx = document.getElementById('profitChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'],
+                    datasets: [{
+                        label: 'Zisk',
+                        data: [2100, 2150, 2120, 2250, 2300, 2380, 2450],
+                        borderColor: '#66fcf1',
+                        backgroundColor: (context) => {
+                            const ctx = context.chart.ctx;
+                            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                            gradient.addColorStop(0, 'rgba(102, 252, 241, 0.3)');
+                            gradient.addColorStop(1, 'rgba(102, 252, 241, 0)');
+                            return gradient;
+                        },
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: '#111',
+                        pointBorderColor: '#66fcf1',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { grid: { color: '#2c3e50' }, ticks: { color: '#888' } },
+                        x: { grid: { display: false }, ticks: { color: '#888' } }
+                    }
+                }
+            });
+        });
+
+        function showPage(id, el) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            if(el) el.classList.add('active');
+        }
+
+        async function generujTiket() {
+            const out = document.getElementById('ticket-output');
+            const load = document.getElementById('loading');
+            out.innerHTML = '';
+            load.style.display = 'block';
+
+            try {
+                const res = await fetch('/api/generuj-tiket');
+                const data = await res.json();
+                load.style.display = 'none';
+
+                let html = '';
+                data.forEach(m => {
+                    // Generovanie guličiek formy
+                    const formGen = (formString) => {
+                        let badges = '';
+                        for (let char of formString) {
+                            let cl = char === 'W' ? 'win' : (char === 'L' ? 'loss' : 'draw');
+                            let txt = char === 'W' ? 'V' : (char === 'L' ? 'P' : 'R');
+                            badges += `<div class="form-badge ${cl}">${txt}</div>`;
+                        }
+                        return badges;
+                    };
+
+                    html += `
+                    <div class="match-card">
+                        <div class="match-header>
+                        <div class="teams-title">${m.domaci} <span style="color:#888; font-size:16px;">vs</span> ${m.hostia}</div>
+                            <div class="match-meta">Kurz: ${m.kurz}</div>
+                        </div>
+                        <div class="match-body">
+                            
+                            <div class="col-left">
+                                <div class="stat-group">
+                                    <div class="stat-label"><span>Forma (Posledných 5)</span></div>
+                                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                                        <div style="display:flex; flex-direction:column; gap:5px;">
+                                            <small>${m.domaci}</small>
+                                            <div class="form-box">${formGen(m.stats.forma_domaci)}</div>
+                                        </div>
+                                        <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-end;">
+                                            <small>${m.hostia}</small>
+                                            <div class="form-box">${formGen(m.stats.forma_hostia)}</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="stat-group">
+                                    <div class="stat-label"><span>Sila Útoku (xG Power)</span><span>${m.stats.utok_domaci}% vs ${m.stats.utok_hostia}%</span></div>
+                                    <div style="display:flex; gap:5px;">
+                                        <div class="progress-bg" style="flex:1"><div class="progress-fill" style="width:${m.stats.utok_domaci}%"></div></div>
+                                        <div class="progress-bg" style="flex:1"><div class="progress-fill" style="width:${m.stats.utok_hostia}%; background:#e74c3c;"></div></div>
+                                    </div>
+                                </div>
+
+                                <div class="stat-group">
+                                    <div class="stat-label"><span>Absencie (Zranenia)</span></div>
+                                    <p style="color:#e74c3c; font-size:13px; margin:0;">${m.stats.zranenia}</p>
+                                </div>
+                            </div>
+
+                            <div class="col-right">
+                                <div class="analysis-section">
+                                    <h4>🧠 AI Deep Dive Analýza</h4>
+                                    <p class="analysis-text">${m.analyza_text}</p>
+                                    
+                                    <ul class="analysis-list">
+                                        ${m.analyza_body.map(bod => `<li>${bod}</li>`).join('')}
+                                    </ul>
+
+                                    <div class="ai-box">
+                                        <div>
+                                            <div style="font-size:12px; color:#888; text-transform:uppercase;">Odporúčaný Tip</div>
+                                            <div class="ai-tip">${m.tip}</div>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <div style="font-size:12px; color:#888;">Dôvera</div>
+                                            <div class="ai-confidence">${m.dovera}%</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                    `;
+                });
+                out.innerHTML = html;
+            } catch(e) { load.style.display = 'none'; alert("Chyba spojenia."); }
+        }
+    </script>
+</body>
+</html>
+"""
+
+# 3. BACKEND (TOTO JE TO OPRAVENÉ MIESTO)
+def get_db():
+    db = database.SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.get("/", response_class=HTMLResponse)
+def home(): 
+    return html_content
+
+@app.get("/api/generuj-tiket")
+def generuj_denny_tiket(db: Session = Depends(get_db)):
+    # TOTO SÚ TIE "ULTRA DÁTA", KTORÉ UVIDÍŠ V GRAFIKE.
+    return [
+        {
+            "domaci": "Manchester United", "hostia": "PAOK", "kurz": 1.45, 
+            "tip": "Výhra United & Over 1.5", "dovera": 88,
+            "stats": {
+                "forma_domaci": "WWDLW", "forma_hostia": "LLDWL",
+                "utok_domaci": 82, "utok_hostia": 40,
+                "zranenia": "Man Utd: Maguire (Otázny), Shaw (Out)"
+            },
+            "analyza_text": "United pod novým trénerom Amorimom doma dominuje. Old Trafford je pevnosť, zatiaľ čo PAOK vonku v Európe trpí.",
+            "analyza_body": [
+                "United má priemer 2.1 xG na domáci zápas.",
+                "PAOK inkasoval v 4 z 5 posledných zápasov.",
+                "Motivácia domácich potvrdiť postup."
+            ]
+        },
+        {
+            "domaci": "Lazio Rím", "hostia": "FC Porto", "kurz": 2.10, 
+            "tip": "Obaja dajú gól (BTTS)", "dovera": 75,
+            "stats": {
+                "forma_domaci": "WWWWL", "forma_hostia": "WWWWW",
+                "utok_domaci": 78, "utok_hostia": 85,
+                "zranenia": "Lazio: Immobile (lavička), Porto: Žiadne"
+            },
+            "analyza_text": "Súboj dvoch ofenzívne ladených tímov. Porto má smrtiacu formu, ale v Taliansku sa hrá ťažko. Očakávame góly na oboch stranách.",
+            "analyza_body": [
+                "Lazio skórovalo v 90% domácich zápasov.",
+                "Porto má sériu 7 výhier v rade.",
+                "Obrany oboch tímov robia chyby pod tlakom."
+            ]
+        }
+    ]
+
+class WhopInput(BaseModel):
+    message: str
+
+@app.post("/whop")
+def whop(data: WhopInput): 
+    return {"status": "ok"}
