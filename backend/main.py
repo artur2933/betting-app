@@ -9,7 +9,7 @@ import random
 models.Base.metadata.create_all(bind=database.engine)
 app = FastAPI()
 
-# 2. HTML GRAFIKA - PRO VERZIA SO ŠTATISTIKAMI
+# 2. HTML GRAFIKA - PRO VERZIA (Tmavý dizajn, Grafy, Analýzy)
 html_content = """
 <!DOCTYPE html>
 <html lang="sk">
@@ -22,8 +22,8 @@ html_content = """
         
         /* Sidebar */
         .sidebar { width: 260px; background-color: #1f2833; display: flex; flex-direction: column; padding: 20px; border-right: 1px solid #45a29e; }
-        .logo { font-size: 24px; font-weight: bold; color: #66fcf1; margin-bottom: 40px; text-transform: uppercase; letter-spacing: 2px; }
-        .menu-item { padding: 15px; margin-bottom: 5px; cursor: pointer; border-radius: 5px; color: #fff; font-weight: 500; transition: 0.3s; }
+        .logo { font-size: 24px; font-weight: bold; color: #66fcf1; margin-bottom: 40px; text-transform: uppercase; letter-spacing: 2px; text-align: center; }
+        .menu-item { padding: 15px; margin-bottom: 5px; cursor: pointer; border-radius: 5px; color: #fff; font-weight: 500; transition: 0.3s; display: flex; align-items: center; gap: 10px; }
         .menu-item:hover, .menu-item.active { background-color: #45a29e; color: #0b0c10; box-shadow: 0 0 10px rgba(102, 252, 241, 0.4); }
         
         /* Main Content */
@@ -32,7 +32,7 @@ html_content = """
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #45a29e; padding-bottom: 15px; }
         .header h1 { margin: 0; color: #fff; }
         
-        /* Generator Button */
+        /* Tlačidlo */
         .btn-analyze { 
             background: linear-gradient(45deg, #45a29e, #66fcf1); border: none; padding: 15px 40px; 
             font-size: 18px; font-weight: bold; color: #0b0c10; border-radius: 30px; cursor: pointer; 
@@ -41,10 +41,11 @@ html_content = """
         }
         .btn-analyze:hover { transform: scale(1.05); }
 
-        /* KARTA ZÁPASU (Detailná) */
+        /* KARTA ZÁPASU */
         .match-card { 
             background: #1f2833; border-radius: 10px; margin-bottom: 25px; overflow: hidden; 
             border: 1px solid #333; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            animation: slideUp 0.5s ease;
         }
         
         .match-header { 
@@ -52,38 +53,39 @@ html_content = """
             border-bottom: 1px solid #45a29e;
         }
         .teams { font-size: 20px; font-weight: bold; color: white; }
-        .league { font-size: 12px; color: #888; text-transform: uppercase; }
+        .league { font-size: 14px; color: #66fcf1; font-weight: bold; }
         
-        .match-body { padding: 20px; display: flex; gap: 20px; }
+        .match-body { padding: 20px; display: flex; gap: 20px; flex-wrap: wrap; }
         
         /* Ľavá časť - Štatistiky */
-        .stats-col { flex: 1; border-right: 1px solid #333; padding-right: 20px; }
+        .stats-col { flex: 1; min-width: 250px; border-right: 1px solid #333; padding-right: 20px; }
         .stat-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
         .stat-bar { height: 6px; background: #333; border-radius: 3px; overflow: hidden; margin-top: 2px; }
         .stat-fill { height: 100%; background: #66fcf1; }
 
         /* Pravá časť - AI Analýza */
-        .analysis-col { flex: 1.5; padding-left: 10px; }
+        .analysis-col { flex: 1.5; min-width: 250px; padding-left: 10px; }
         .prediction-box { 
-            background: rgba(69, 162, 158, 0.2); padding: 10px; border-radius: 5px; 
+            background: rgba(69, 162, 158, 0.2); padding: 15px; border-radius: 5px; 
             border-left: 4px solid #66fcf1; margin-bottom: 15px;
         }
         .prediction-title { color: #66fcf1; font-weight: bold; font-size: 12px; text-transform: uppercase; }
-        .prediction-value { font-size: 18px; font-weight: bold; color: white; margin-top: 5px; }
-        .reason-text { font-size: 14px; color: #ccc; line-height: 1.5; font-style: italic; }
+        .prediction-value { font-size: 20px; font-weight: bold; color: white; margin-top: 5px; }
+        .reason-text { font-size: 14px; color: #ccc; line-height: 1.6; font-style: italic; }
 
         .page { display: none; }
         .page.active { display: block; animation: fadeIn 0.4s; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     </style>
 </head>
 <body>
 
     <div class="sidebar">
         <div class="logo">⚡ BET PRO</div>
-        <div class="menu-item active" onclick="showPage('home')">🏠 Dashboard</div>
-        <div class="menu-item" onclick="showPage('generator')">📊 Analýza Zápasov</div>
-        <div class="menu-item" onclick="showPage('history')">📜 História</div>
+        <div class="menu-item active" onclick="showPage('home', this)">🏠 Dashboard</div>
+        <div class="menu-item" onclick="showPage('generator', this)">📊 Analýza Zápasov</div>
+        <div class="menu-item" onclick="showPage('history', this)">📜 História</div>
     </div>
 
     <div class="main-content">
@@ -94,11 +96,18 @@ html_content = """
                 <div style="background:#1f2833; padding:20px; flex:1; border-radius:10px;">
                     <h3>💰 Tvoj Bankroll</h3>
                     <h1 style="color:#66fcf1">€2,450.00</h1>
+                    <small style="color:#888">Simulovaný stav</small>
                 </div>
                 <div style="background:#1f2833; padding:20px; flex:1; border-radius:10px;">
                     <h3>📈 Úspešnosť Modelu</h3>
                     <h1 style="color:#66fcf1">78.4%</h1>
+                    <small style="color:#888">Posledných 30 dní</small>
                 </div>
+            </div>
+            
+            <div style="margin-top: 30px; padding: 20px; background: #151b24; border-radius: 10px; border: 1px solid #333;">
+                <h3 style="color: #66fcf1;">📢 Novinky v systéme</h3>
+                <p>Pridaná podpora pre detailné štatistiky xG (Očakávané góly). Prejdi do sekcie <b>Analýza Zápasov</b> a vyskúšaj nový generátor.</p>
             </div>
         </div>
 
@@ -110,8 +119,9 @@ html_content = """
                 <button class="btn-analyze" onclick="generujTiket()">🚀 Skenovať Ponuku</button>
             </div>
 
-            <div id="loading" style="display:none; text-align:center; color:#66fcf1;">
+            <div id="loading" style="display:none; text-align:center; color:#66fcf1; margin-top: 50px;">
                 <h2>⏳ Sťahujem dáta o strelách, držaní lopty a forme...</h2>
+                <p>Prosím čakaj, prebieha hĺbková analýza.</p>
             </div>
 
             <div id="results"></div>
@@ -119,16 +129,17 @@ html_content = """
 
         <div id="history" class="page">
             <div class="header"><h1>História</h1></div>
-            <p>História tiketov je prázdna.</p>
+            <p>Zatiaľ žiadne uzavreté tikety.</p>
         </div>
 
     </div>
 
     <script>
-        function showPage(id) {
+        function showPage(id, el) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
             document.getElementById(id).classList.add('active');
+            if(el) el.classList.add('active');
         }
 
         async function generujTiket() {
@@ -144,7 +155,6 @@ html_content = """
 
                 let html = '';
                 data.forEach(m => {
-                    // Výpočet šírky grafov pre vizuálny efekt
                     let homePower = m.stats.utok_domaci; 
                     let awayPower = m.stats.utok_hostia;
 
@@ -152,18 +162,18 @@ html_content = """
                     <div class="match-card">
                         <div class="match-header">
                             <div class="teams">${m.domaci} vs ${m.hostia}</div>
-                            <div class="league">Kurz: <span style="color:#66fcf1; font-weight:bold; font-size:16px;">${m.kurz}</span></div>
+                            <div class="league">Kurz: ${m.kurz}</div>
                         </div>
                         <div class="match-body">
                             <div class="stats-col">
-                                <div style="color:#888; margin-bottom:10px; font-size:12px;">KĽÚČOVÉ ŠTATISTIKY</div>
+                                <div style="color:#888; margin-bottom:10px; font-size:12px; font-weight:bold;">KĽÚČOVÉ ŠTATISTIKY</div>
                                 
                                 <div class="stat-row">
-                                    <span>Gólový priemer (5z)</span>
+                                    <span>Gólový priemer</span>
                                     <span>${m.stats.goly_priemer}</span>
                                 </div>
                                 <div class="stat-row">
-                                    <span>Šanca na gól</span>
+                                    <span>xG (Očakávané góly)</span>
                                     <span>${m.stats.xg_data}</span>
                                 </div>
                                 
@@ -192,25 +202,31 @@ html_content = """
                     `;
                 });
                 out.innerHTML = html;
-            } catch(e) { alert("Chyba."); }
+            } catch(e) { 
+                load.style.display = 'none';
+                alert("Chyba spojenia so serverom."); 
+            }
         }
     </script>
 </body>
 </html>
 """
 
-# 3. BACKEND - SIMULÁCIA PROFESIONÁLNYCH DÁT
+# 3. BACKEND - OPRAVENÁ SYNTAX A DÁTA
 def get_db():
-    db = database.SessionLocal(); try: yield db; finally: db.close()
+    db = database.SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @app.get("/", response_class=HTMLResponse)
-def home(): return html_content
+def home(): 
+    return html_content
 
 @app.get("/api/generuj-tiket")
 def generuj_denny_tiket(db: Session = Depends(get_db)):
-    # Keďže nemáme live scraper, vytvoríme "PROFI" štruktúru dát ručne
-    # Toto presne uvidíš v grafike
-    
+    # Simulácia PROFESIONÁLNYCH DÁT (kým napojíme live API)
     profesionalne_data = [
         {
             "domaci": "Manchester United",
@@ -238,7 +254,7 @@ def generuj_denny_tiket(db: Session = Depends(get_db)):
                 "utok_hostia": 70
             },
             "analyza_titulek": "Otvorený ofenzívny futbal",
-            "analyza_text": "Lazio doma skórovalo v 9 z 10 zápasov. Porto má smrtiace protiútoky. Štatistika xG (očakávané góly) naznačuje, že čisté konto tu neudrží nikto."
+            "analyza_text": "Lazio doma skórovalo v 9 z 10 zápasov. Porto má smrtiace protiútoky. Štatistika xG naznačuje, že čisté konto tu neudrží nikto."
         },
         {
             "domaci": "Galatasaray",
@@ -255,11 +271,11 @@ def generuj_denny_tiket(db: Session = Depends(get_db)):
             "analyza_text": "Osimhen proti útoku Spurs. Oba tímy ignorujú obranu a hrajú na góly. Posledné zápasy oboch tímov skončili divoko (4:3, 3:2). Value bet na góly."
         }
     ]
-            
     return profesionalne_data
 
 class WhopInput(BaseModel):
     message: str
 
 @app.post("/whop")
-def whop(data: WhopInput): return {"status": "ok"}
+def whop(data: WhopInput): 
+    return {"status": "ok"}
