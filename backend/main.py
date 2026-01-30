@@ -9,7 +9,7 @@ import random
 models.Base.metadata.create_all(bind=database.engine)
 app = FastAPI()
 
-# 2. HTML GRAFIKA - ULTRA PRO VERZIA (Väčšie Názvy Tímov)
+# 2. HTML GRAFIKA - BLUE CYBERPUNK EDITION
 html_content = """
 <!DOCTYPE html>
 <html lang="sk">
@@ -18,97 +18,108 @@ html_content = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Betting PRO Analytics</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
     
     <style>
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0b0c10; color: #c5c6c7; display: flex; height: 100vh; overflow: hidden; }
+        /* --- CYBERPUNK THEME --- */
+        :root {
+            --bg-dark: #050a10;
+            --bg-card: #0f1621;
+            --primary: #00f3ff; /* Elektrická Modrá */
+            --secondary: #0088ff;
+            --text-main: #e0f7fa;
+            --text-muted: #6b8c9e;
+            --border: #1e2a3b;
+            --danger: #ff0055;
+            --success: #00ff9d;
+        }
+
+        body { margin: 0; padding: 0; font-family: 'Rajdhani', sans-serif; background-color: var(--bg-dark); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
         
-        /* Sidebar */
-        .sidebar { width: 260px; background-color: #111; display: flex; flex-direction: column; padding: 25px; border-right: 1px solid #333; }
-        .logo { font-size: 22px; font-weight: 800; color: #66fcf1; margin-bottom: 50px; text-transform: uppercase; letter-spacing: 3px; text-align: center; border-bottom: 2px solid #66fcf1; padding-bottom: 20px;}
-        .menu-item { padding: 15px; margin-bottom: 10px; cursor: pointer; border-radius: 8px; color: #888; font-weight: 600; transition: 0.3s; display: flex; align-items: center; gap: 15px; }
-        .menu-item:hover, .menu-item.active { background-color: #1a1a1a; color: #fff; border-left: 4px solid #66fcf1; }
+        /* SIDEBAR */
+        .sidebar { width: 260px; background-color: #0a0e14; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 30px 20px; }
+        .logo { font-size: 26px; font-weight: 700; color: var(--primary); margin-bottom: 50px; text-transform: uppercase; letter-spacing: 2px; text-align: center; text-shadow: 0 0 15px rgba(0, 243, 255, 0.5); }
+        .menu-item { padding: 15px; margin-bottom: 10px; cursor: pointer; border-radius: 6px; color: var(--text-muted); font-weight: 600; transition: 0.3s; display: flex; align-items: center; gap: 15px; font-size: 18px; }
+        .menu-item:hover, .menu-item.active { background: rgba(0, 243, 255, 0.1); color: var(--primary); border-right: 3px solid var(--primary); }
         
-        /* Main Content */
-        .main-content { flex: 1; padding: 40px; overflow-y: auto; background: #0b0c10; }
+        /* MAIN CONTENT */
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; background: radial-gradient(circle at top right, #0f1824 0%, var(--bg-dark) 80%); }
         
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
-        .header h1 { margin: 0; color: #fff; font-size: 28px; font-weight: 700; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; border-bottom: 1px solid var(--border); padding-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 32px; font-weight: 700; letter-spacing: 1px; }
         
-        /* Tlačidlo */
+        /* TLAČIDLO */
         .btn-analyze { 
-            background: #66fcf1; border: none; padding: 18px 50px; 
-            font-size: 18px; font-weight: 800; color: #0b0c10; border-radius: 50px; cursor: pointer; 
-            box-shadow: 0 0 25px rgba(102, 252, 241, 0.4); transition: transform 0.2s;
-            display: block; margin: 0 auto 40px auto; letter-spacing: 1px;
+            background: var(--primary); border: none; padding: 18px 60px; 
+            font-size: 18px; font-weight: 800; color: #000; clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
+            cursor: pointer; transition: all 0.3s; display: block; margin: 0 auto 50px auto; text-transform: uppercase; letter-spacing: 2px;
         }
-        .btn-analyze:hover { transform: scale(1.05); background: #fff; }
+        .btn-analyze:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(0, 243, 255, 0.6); background: #fff; }
 
-        /* KARTA ZÁPASU (Advanced) */
+        /* KARTA ZÁPASU */
         .match-card { 
-            background: #151b24; border-radius: 16px; margin-bottom: 30px; overflow: hidden; 
-            border: 1px solid #2c3e50; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+            background: var(--bg-card); border-radius: 4px; margin-bottom: 40px; 
+            border: 1px solid var(--border); position: relative; overflow: hidden;
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
         }
         
-        .match-header { 
-            background: linear-gradient(90deg, #0f141a 0%, #1a222e 100%); 
-            padding: 25px 30px; display: flex; justify-content: space-between; align-items: center; 
-            border-bottom: 1px solid #2c3e50;
+        .match-card::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary);
+        }
+
+        /* HERO HEADER (VS) */
+        .match-header {
+            padding: 30px; background: linear-gradient(90deg, rgba(0,243,255,0.05) 0%, transparent 100%);
+            display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);
         }
         
-        /* --- TU SOM ZVÄČŠIL PÍSMO --- */
-        .teams-title { 
-            font-size: 32px; /* Zväčšené z 22px */
-            font-weight: 800; 
-            color: white; 
-            letter-spacing: 1px;
-            text-shadow: 0 0 20px rgba(0,0,0,0.5);
+        .team-box { text-align: center; flex: 1; }
+        .team-name { font-size: 36px; font-weight: 700; letter-spacing: 1px; color: #fff; margin-bottom: 5px; }
+        .team-meta { font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; }
+        
+        .vs-circle { 
+            width: 50px; height: 50px; background: #000; border: 2px solid var(--primary); border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; font-weight: 900; color: var(--primary); font-size: 14px;
+            box-shadow: 0 0 20px rgba(0,243,255,0.3);
         }
-        
-        .match-meta { font-size: 16px; color: #66fcf1; font-weight: bold; background: rgba(102, 252, 241, 0.1); padding: 8px 18px; border-radius: 20px;}
-        
-        .match-body { padding: 30px; display: flex; gap: 40px; flex-wrap: wrap; }
-        
-        /* Stĺpce */
-        .col-left { flex: 1; min-width: 300px; border-right: 1px solid #2c3e50; padding-right: 30px; }
-        .col-right { flex: 1; min-width: 300px; }
 
-        /* Štatistiky - Forma */
-        .form-box { display: flex; gap: 5px; margin-top: 5px; }
-        .form-badge { width: 25px; height: 25px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: black; }
-        .win { background: #2ecc71; }
-        .draw { background: #f1c40f; }
-        .loss { background: #e74c3c; }
-
-        /* Progress Bary */
-        .stat-group { margin-bottom: 20px; }
-        .stat-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; color: #888; }
-        .progress-bg { height: 8px; background: #222; border-radius: 4px; overflow: hidden; }
-        .progress-fill { height: 100%; background: #66fcf1; border-radius: 4px; }
-
-        /* Sekcia Analýzy */
-        .analysis-section h4 { color: #66fcf1; margin: 0 0 15px 0; text-transform: uppercase; font-size: 14px; letter-spacing: 1px; }
-        .analysis-text { font-size: 15px; line-height: 1.6; color: #dcdcdc; }
-        .analysis-list { list-style: none; padding: 0; margin-top: 15px; }
-        .analysis-list li { margin-bottom: 8px; padding-left: 20px; position: relative; color: #aaa; }
-        .analysis-list li::before { content: "•"; color: #66fcf1; position: absolute; left: 0; font-weight: bold; }
-
-        /* AI Prediction Box */
-        .ai-box { 
-            background: rgba(102, 252, 241, 0.05); padding: 20px; border-radius: 12px; 
-            border: 1px solid rgba(102, 252, 241, 0.2); display: flex; align-items: center; justify-content: space-between;
-            margin-top: 20px;
+        /* GRID ŠTATISTÍK */
+        .stats-grid {
+            display: grid; grid-template-columns: 3fr 2fr; gap: 0;
         }
-        .ai-tip { font-size: 24px; font-weight: 800; color: #fff; }
-        .ai-confidence { background: #66fcf1; color: #000; padding: 5px 15px; border-radius: 5px; font-weight: bold; }
+        .left-panel { padding: 30px; border-right: 1px solid var(--border); }
+        .right-panel { padding: 30px; background: rgba(0,0,0,0.2); }
+
+        /* PROGRESS BARY */
+        .stat-row { margin-bottom: 25px; }
+        .stat-header { display: flex; justify-content: space-between; font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; font-weight: 700; }
+        .bar-container { display: flex; gap: 5px; height: 10px; background: #000; }
+        .bar-home { background: var(--primary); height: 100%; transition: width 1s; }
+        .bar-away { background: var(--danger); height: 100%; transition: width 1s; }
+
+        /* AI BOX */
+        .ai-prediction {
+            background: rgba(0, 243, 255, 0.05); border: 1px solid var(--primary); padding: 20px;
+            text-align: center; margin-bottom: 20px; position: relative;
+        }
+        .ai-prediction::after { content: 'AI CONFIRMED'; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #000; color: var(--primary); font-size: 10px; padding: 2px 8px; border: 1px solid var(--primary); }
+        
+        .tip-val { font-size: 24px; font-weight: 700; color: #fff; margin: 10px 0; }
+        .confidence { font-size: 40px; font-weight: 900; color: var(--primary); display: block; line-height: 1; text-shadow: 0 0 20px rgba(0,243,255,0.5); }
+        .conf-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; }
+
+        /* FORMA DOTS */
+        .form-dots { display: flex; gap: 4px; justify-content: center; margin-top: 5px; }
+        .dot { width: 8px; height: 8px; border-radius: 2px; }
+        .w { background: var(--success); }
+        .d { background: #ffcc00; }
+        .l { background: var(--danger); }
 
         .page { display: none; }
         .page.active { display: block; animation: fadeIn 0.4s; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-        /* Graf Kontajner */
-        .chart-box { background: #151b24; padding: 25px; border-radius: 16px; border: 1px solid #2c3e50; height: 350px; }
     </style>
 </head>
 <body>
@@ -116,57 +127,48 @@ html_content = """
     <div class="sidebar">
         <div class="logo">⚡ BET PRO</div>
         <div class="menu-item active" onclick="showPage('home', this)">🏠 Dashboard</div>
-        <div class="menu-item" onclick="showPage('generator', this)">📊 VIP Analýza</div>
+        <div class="menu-item" onclick="showPage('generator', this)">📊 AI Scanner</div>
         <div class="menu-item" onclick="showPage('results-page', this)">✅ Výsledky</div>
     </div>
 
     <div class="main-content">
         
         <div id="home" class="page active">
-            <div class="header"><h1>Vitaj späť, Trader.</h1></div>
+            <div class="header"><h1>MARKET OVERVIEW</h1></div>
             
             <div style="display:flex; gap:20px; margin-bottom: 30px;">
-                <div style="background:#151b24; padding:25px; flex:1; border-radius:16px; border:1px solid #2c3e50;">
-                    <h3 style="color:#888; font-size:14px; margin-top:0;">DNEŠNÝ POTENCIÁL</h3>
-                    <h1 style="color:#fff; font-size:36px; margin:10px 0;">3 Zápasy</h1>
-                    <small style="color:#66fcf1">AI našla vysokú hodnotu (Value)</small>
+                <div style="background:var(--bg-card); padding:30px; flex:1; border:1px solid var(--border);">
+                    <div style="color:var(--text-muted); font-size:12px; font-weight:bold;">DENNÝ ZISK</div>
+                    <div style="color:#fff; font-size:42px; font-weight:bold; margin-top:5px;">+ €124.50</div>
                 </div>
-                <div style="background:#151b24; padding:25px; flex:1; border-radius:16px; border:1px solid #2c3e50;">
-                    <h3 style="color:#888; font-size:14px; margin-top:0;">BANKROLL (Simulácia)</h3>
-                    <h1 style="color:#fff; font-size:36px; margin:10px 0;">€2,450.00</h1>
-                    <small style="color:#2ecc71">▲ +12.5% tento týždeň</small>
+                <div style="background:var(--bg-card); padding:30px; flex:1; border:1px solid var(--border);">
+                    <div style="color:var(--text-muted); font-size:12px; font-weight:bold;">AI ÚSPEŠNOSŤ</div>
+                    <div style="color:var(--primary); font-size:42px; font-weight:bold; margin-top:5px; text-shadow: 0 0 20px rgba(0,243,255,0.3);">78.4%</div>
                 </div>
             </div>
             
-            <div class="chart-box">
-                <h3 style="color:#fff; margin-top:0;">Vývoj Zisku</h3>
+            <div style="background:var(--bg-card); padding:25px; border:1px solid var(--border); height:350px;">
                 <canvas id="profitChart"></canvas>
             </div>
         </div>
 
         <div id="generator" class="page">
-            <div class="header"><h1>Deep AI Analysis</h1></div>
+            <div class="header"><h1>MATCH ANALYZER</h1></div>
             
-            <div style="text-align:center; margin-bottom:40px;">
-                <p style="color:#888; margin-bottom:20px;">Spusti hĺbkový sken zápasov. AI analyzuje formu, xG, zranenia a pohyby kurzov.</p>
-                <button class="btn-analyze" onclick="generujTiket()">SPUSTIŤ SKENOVANIE</button>
+            <div style="text-align:center;">
+                <button class="btn-analyze" onclick="generujTiket()">SPUSTIŤ ANALÝZU</button>
             </div>
 
-            <div id="loading" style="display:none; text-align:center; color:#66fcf1; margin-top: 50px;">
-                <h2 style="font-weight:300;">⏳ Analyzujem milióny dátových bodov...</h2>
-                <p>Pripravujem report...</p>
+            <div id="loading" style="display:none; text-align:center; color:var(--primary); margin-top: 50px;">
+                <h2>⚡ SŤAHUJEM DÁTA...</h2>
             </div>
 
             <div id="ticket-output"></div>
         </div>
 
         <div id="results-page" class="page">
-            <div class="header"><h1>Výkonnosť Modelu</h1></div>
-            <p>História posledných AI predikcií.</p>
-            <div class="match-card">
-                <div class="match-header"><div class="teams-title">Včerajší Výkon</div></div>
-                <div class="match-body"><p style="color:#aaa;">Načítavam dáta...</p></div>
-            </div>
+            <div class="header"><h1>HISTÓRIA</h1></div>
+            <p style="color:#666">Zatiaľ žiadne záznamy.</p>
         </div>
 
     </div>
@@ -180,22 +182,21 @@ html_content = """
                 data: {
                     labels: ['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'],
                     datasets: [{
-                        label: 'Zisk',
+                        label: 'Bankroll',
                         data: [2100, 2150, 2120, 2250, 2300, 2380, 2450],
-                        borderColor: '#66fcf1',
-                        backgroundColor: (context) => {
-                            const ctx = context.chart.ctx;
-                            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-                            gradient.addColorStop(0, 'rgba(102, 252, 241, 0.3)');
-                            gradient.addColorStop(1, 'rgba(102, 252, 241, 0)');
-                            return gradient;
+                        borderColor: '#00f3ff',
+                        backgroundColor: (ctx) => {
+                            const grad = ctx.chart.ctx.createLinearGradient(0,0,0,300);
+                            grad.addColorStop(0, 'rgba(0, 243, 255, 0.2)');
+                            grad.addColorStop(1, 'rgba(0, 243, 255, 0)');
+                            return grad;
                         },
-                        borderWidth: 3,
+                        borderWidth: 2,
                         tension: 0.4,
                         fill: true,
-                        pointBackgroundColor: '#111',
-                        pointBorderColor: '#66fcf1',
-                        pointBorderWidth: 2
+                        pointRadius: 4,
+                        pointBackgroundColor: '#000',
+                        pointBorderColor: '#00f3ff'
                     }]
                 },
                 options: {
@@ -203,8 +204,8 @@ html_content = """
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
                     scales: {
-                        y: { grid: { color: '#2c3e50' }, ticks: { color: '#888' } },
-                        x: { grid: { display: false }, ticks: { color: '#888' } }
+                        y: { grid: { color: '#1e2a3b' }, ticks: { color: '#6b8c9e' } },
+                        x: { grid: { display: false }, ticks: { color: '#6b8c9e' } }
                     }
                 }
             });
@@ -230,89 +231,93 @@ html_content = """
 
                 let html = '';
                 data.forEach(m => {
-                    // Generovanie guličiek formy
-                    const formGen = (formString) => {
-                        let badges = '';
-                        for (let char of formString) {
-                            let cl = char === 'W' ? 'win' : (char === 'L' ? 'loss' : 'draw');
-                            let txt = char === 'W' ? 'V' : (char === 'L' ? 'P' : 'R');
-                            badges += `<div class="form-badge ${cl}">${txt}</div>`;
-                        }
-                        return badges;
+                    const dots = (f) => {
+                        let h = '';
+                        for(let c of f) h+= `<div class="dot ${c==='W'?'w':(c==='L'?'l':'d')}"></div>`;
+                        return h;
                     };
 
                     html += `
                     <div class="match-card">
                         <div class="match-header">
-                            <div class="teams-title">${m.domaci} <span style="color:#888; font-size:24px;">vs</span> ${m.hostia}</div>
-                            <div class="match-meta">Kurz: ${m.kurz}</div>
+                            <div class="team-box">
+                                <div class="team-name">${m.domaci}</div>
+                                <div class="team-meta">HOME</div>
+                                <div class="form-dots">${dots(m.stats.forma_domaci)}</div>
+                            </div>
+                            <div class="vs-circle">VS</div>
+                            <div class="team-box">
+                                <div class="team-name">${m.hostia}</div>
+                                <div class="team-meta">AWAY</div>
+                                <div class="form-dots">${dots(m.stats.forma_hostia)}</div>
+                            </div>
                         </div>
-                        <div class="match-body">
-                            
-                            <div class="col-left">
-                                <div class="stat-group">
-                                    <div class="stat-label"><span>Forma (Posledných 5)</span></div>
-                                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                                        <div style="display:flex; flex-direction:column; gap:5px;">
-                                            <small>${m.domaci}</small>
-                                            <div class="form-box">${formGen(m.stats.forma_domaci)}</div>
-                                        </div>
-                                        <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-end;">
-                                            <small>${m.hostia}</small>
-                                            <div class="form-box">${formGen(m.stats.forma_hostia)}</div>
-                                        </div>
+
+                        <div class="stats-grid">
+                            <div class="left-panel">
+                                
+                                <div class="stat-row">
+                                    <div class="stat-header">
+                                        <span>ÚTOČNÁ SILA (xG)</span>
+                                        <span>${m.stats.utok_domaci}% vs ${m.stats.utok_hostia}%</span>
+                                    </div>
+                                    <div class="bar-container">
+                                        <div class="bar-home" style="width:${m.stats.utok_domaci}%"></div>
+                                        <div class="bar-away" style="width:${m.stats.utok_hostia}%"></div>
                                     </div>
                                 </div>
 
-                                <div class="stat-group">
-                                    <div class="stat-label"><span>Sila Útoku (xG Power)</span><span>${m.stats.utok_domaci}% vs ${m.stats.utok_hostia}%</span></div>
-                                    <div style="display:flex; gap:5px;">
-                                        <div class="progress-bg" style="flex:1"><div class="progress-fill" style="width:${m.stats.utok_domaci}%"></div></div>
-                                        <div class="progress-bg" style="flex:1"><div class="progress-fill" style="width:${m.stats.utok_hostia}%; background:#e74c3c;"></div></div>
+                                <div class="stat-row">
+                                    <div class="stat-header">
+                                        <span>PEVNOSŤ OBRANY</span>
+                                        <span>${m.stats.obrana_domaci}% vs ${m.stats.obrana_hostia}%</span>
+                                    </div>
+                                    <div class="bar-container">
+                                        <div class="bar-home" style="width:${m.stats.obrana_domaci}%"></div>
+                                        <div class="bar-away" style="width:${m.stats.obrana_hostia}%"></div>
                                     </div>
                                 </div>
 
-                                <div class="stat-group">
-                                    <div class="stat-label"><span>Absencie (Zranenia)</span></div>
-                                    <p style="color:#e74c3c; font-size:13px; margin:0;">${m.stats.zranenia}</p>
+                                <div style="margin-top:30px;">
+                                    <div style="font-size:12px; color:#6b8c9e; font-weight:bold; margin-bottom:5px;">POSLEDNÝ VZÁJOMNÝ ZÁPAS</div>
+                                    <div style="color:#fff; font-size:18px;">${m.stats.posledny_zapas}</div>
                                 </div>
+
+                                <div style="margin-top:20px;">
+                                    <div style="font-size:12px; color:#ff0055; font-weight:bold; margin-bottom:5px;">KĽÚČOVÉ ABSENCIE</div>
+                                    <div style="color:#e0f7fa;">${m.stats.zranenia}</div>
+                                </div>
+
                             </div>
 
-                            <div class="col-right">
-                                <div class="analysis-section">
-                                    <h4>🧠 AI Deep Dive Analýza</h4>
-                                    <p class="analysis-text">${m.analyza_text}</p>
-                                    
-                                    <ul class="analysis-list">
-                                        ${m.analyza_body.map(bod => `<li>${bod}</li>`).join('')}
-                                    </ul>
-
-                                    <div class="ai-box">
-                                        <div>
-                                            <div style="font-size:12px; color:#888; text-transform:uppercase;">Odporúčaný Tip</div>
-                                            <div class="ai-tip">${m.tip}</div>
-                                        </div>
-                                        <div style="text-align:right;">
-                                            <div style="font-size:12px; color:#888;">Dôvera</div>
-                                            <div class="ai-confidence">${m.dovera}%</div>
-                                        </div>
-                                    </div>
+                            <div class="right-panel">
+                                <div class="ai-prediction">
+                                    <div class="conf-label">Dôvera modelu</div>
+                                    <div class="confidence">${m.dovera}%</div>
+                                    <div style="margin:15px 0; border-top:1px solid rgba(0,243,255,0.3);"></div>
+                                    <div class="conf-label">Odporúčaný Tip</div>
+                                    <div class="tip-val">${m.tip}</div>
+                                    <div style="font-size:18px; color:#00f3ff; font-weight:bold;">Kurz: ${m.kurz}</div>
+                                </div>
+                                
+                                <div style="font-size:14px; line-height:1.6; color:#ccc;">
+                                    "<b>${m.analyza_titul}</b>"<br>
+                                    ${m.analyza_text}
                                 </div>
                             </div>
-
                         </div>
                     </div>
                     `;
                 });
                 out.innerHTML = html;
-            } catch(e) { load.style.display = 'none'; alert("Chyba spojenia."); }
+            } catch(e) { load.style.display = 'none'; alert("Chyba."); }
         }
     </script>
 </body>
 </html>
 """
 
-# 3. BACKEND 
+# 3. BACKEND (Rozšírené Štatistiky)
 def get_db():
     db = database.SessionLocal()
     try:
@@ -328,34 +333,30 @@ def home():
 def generuj_denny_tiket(db: Session = Depends(get_db)):
     return [
         {
-            "domaci": "Manchester United", "hostia": "PAOK", "kurz": 1.45, 
-            "tip": "Výhra United & Over 1.5", "dovera": 88,
+            "domaci": "Man Utd", "hostia": "PAOK", "kurz": 1.45, 
+            "tip": "United & Over 1.5", "dovera": 88,
             "stats": {
                 "forma_domaci": "WWDLW", "forma_hostia": "LLDWL",
-                "utok_domaci": 82, "utok_hostia": 40,
-                "zranenia": "Man Utd: Maguire (Otázny), Shaw (Out)"
+                "utok_domaci": 75, "utok_hostia": 25,
+                "obrana_domaci": 60, "obrana_hostia": 40,
+                "zranenia": "Maguire (Out), Shaw (Quest)",
+                "posledny_zapas": "Man Utd 2 - 0 PAOK (2023)"
             },
-            "analyza_text": "United pod novým trénerom Amorimom doma dominuje. Old Trafford je pevnosť, zatiaľ čo PAOK vonku v Európe trpí.",
-            "analyza_body": [
-                "United má priemer 2.1 xG na domáci zápas.",
-                "PAOK inkasoval v 4 z 5 posledných zápasov.",
-                "Motivácia domácich potvrdiť postup."
-            ]
+            "analyza_titul": "Dominancia na Old Trafford",
+            "analyza_text": "Amorimova taktika funguje. United majú doma priemer 2.4 xG. PAOK vonku stráca stabilitu."
         },
         {
-            "domaci": "Lazio Rím", "hostia": "FC Porto", "kurz": 2.10, 
-            "tip": "Obaja dajú gól (BTTS)", "dovera": 75,
+            "domaci": "Lazio", "hostia": "Porto", "kurz": 2.10, 
+            "tip": "BTTS (Obaja gól)", "dovera": 75,
             "stats": {
                 "forma_domaci": "WWWWL", "forma_hostia": "WWWWW",
-                "utok_domaci": 78, "utok_hostia": 85,
-                "zranenia": "Lazio: Immobile (lavička), Porto: Žiadne"
+                "utok_domaci": 60, "utok_hostia": 40,
+                "obrana_domaci": 45, "obrana_hostia": 55,
+                "zranenia": "Žiadne významné absencie",
+                "posledny_zapas": "Lazio 2 - 2 Porto (2022)"
             },
-            "analyza_text": "Súboj dvoch ofenzívne ladených tímov. Porto má smrtiacu formu, ale v Taliansku sa hrá ťažko. Očakávame góly na oboch stranách.",
-            "analyza_body": [
-                "Lazio skórovalo v 90% domácich zápasov.",
-                "Porto má sériu 7 výhier v rade.",
-                "Obrany oboch tímov robia chyby pod tlakom."
-            ]
+            "analyza_titul": "Otvorená prestrelka",
+            "analyza_text": "Porto skóruje v každom zápase. Lazio doma hrá nátlakovo. Očakávame góly na oboch stranách."
         }
     ]
 
