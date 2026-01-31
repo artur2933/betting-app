@@ -1,3 +1,9 @@
 fastapi
 uvicorn
 requests
+sqlalchemy
+passlib[bcrypt]
+python-jose[cryptography]
+bcrypt
+python-multipart
+psycopg2-binary
