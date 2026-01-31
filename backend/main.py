@@ -14,7 +14,7 @@ app = FastAPI()
 # ==========================================
 # 🔑 NASTAVENIE API (TU VLOŽ SVOJ KĽÚČ)
 # ==========================================
-API_KEY = "VLOZ_SVOJ_API_KLUC_SEM"  # <-- SEM VLOŽ KĽÚČ Z MAILU
+API_KEY = "3e42c726ab364fb9eeede03b0017964c"  # <-- SEM VLOŽ KĽÚČ Z MAILU
 # ==========================================
 
 # Pomocná funkcia na stiahnutie dát z API
@@ -310,3 +310,4 @@ html_content = """
         async function generujVlastny() {
             const risk = document.getElementById('riskLevel').value;
             const count = document.getElementById('matchCount
+
