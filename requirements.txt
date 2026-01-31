@@ -4,4 +4,7 @@ sqlalchemy
 playwright
 openai
 python-multipart
+passlib[bcrypt]
+python-jose[cryptography]
+bcrypt
 requests
