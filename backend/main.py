@@ -309,5 +309,51 @@ html_content = """
 
         async function generujVlastny() {
             const risk = document.getElementById('riskLevel').value;
-            const count = document.getElementById('matchCount
+            const count = document.getElementById('matchCount').value;
+            const div = document.getElementById('custom-ticket-result');
+            div.innerHTML = '<p style="text-align:center; color:#66fcf1; font-size:18px;">⏳ Filtrujem ponuku...</p>';
+            const res = await fetch(`/api/vlastny-tiket?risk=${risk}&count=${count}`);
+            const data = await res.json();
+            renderTicket(data, div, "TVOJ VLASTNÝ TIKET");
+        }
 
+        function renderTicket(data, element, title) {
+            if (data.length === 0) { element.innerHTML = "<p style='text-align:center;color:#888'>Žiadne zápasy.</p>"; return; }
+            let rows = ''; let total = 1;
+            data.forEach(m => { total *= m.kurz; rows += `<div class="ticket-row"><div><div class="t-match">${m.domaci} - ${m.hostia}</div><div class="t-tip">Tip: ${m.tip}</div></div><div class="t-odds">${m.kurz.toFixed(2)}</div></div>`; });
+            element.innerHTML = `<div class="ticket-wrapper"><div class="ticket-header"><h2 class="ticket-title">${title}</h2></div><div class="ticket-body">${rows}</div><div class="ticket-footer"><div class="t-val">CELKOVÝ KURZ</div><div class="t-val">${total.toFixed(2)}</div></div></div>`;
+        }
+    </script>
+</body>
+</html>
+"""
+
+# 3. BACKEND ROUTES
+def get_db():
+    db = database.SessionLocal(); try: yield db; finally: db.close()
+
+@app.get("/", response_class=HTMLResponse)
+def home(): return html_content
+
+@app.get("/api/generuj-tiket")
+def get_all_matches(limit: int = 10):
+    return fetch_live_data()[:limit]
+
+@app.get("/api/tiket-dna")
+def get_tiket_dna():
+    matches = fetch_live_data()
+    safe = [m for m in matches if m['risk'] == 1]
+    return safe[:3] if safe else matches[:3]
+
+@app.get("/api/vlastny-tiket")
+def get_custom_ticket(risk: int = 1, count: int = 2):
+    matches = fetch_live_data()
+    filtered = [m for m in matches if m['risk'] == risk]
+    if len(filtered) < count: filtered = matches # Fallback
+    return filtered[:count]
+
+class WhopInput(BaseModel):
+    message: str
+
+@app.post("/whop")
+def whop(data: WhopInput): return {"status": "ok"}
