@@ -9,26 +9,38 @@ import random
 models.Base.metadata.create_all(bind=database.engine)
 app = FastAPI()
 
-# --- MOCK DATABÁZA (Aby ti fungovalo generovanie tiketov) ---
+# --- MOCK DATABÁZA ---
+# Rozšíril som dáta, aby analýza mala odrážky (body) ako na obrázku
 MATCH_DATABASE = [
-    # TUTOVKY (Riziko 1)
-    {"domaci": "Man City", "hostia": "Sheffield", "kurz": 1.18, "tip": "1", "risk": 1, "liga": "Premier League", "stats": {"utok_domaci": 88, "utok_hostia": 20, "zranenia": "Žiadne"}},
-    {"domaci": "Real Madrid", "hostia": "Almeria", "kurz": 1.25, "tip": "1", "risk": 1, "liga": "La Liga", "stats": {"utok_domaci": 85, "utok_hostia": 30, "zranenia": "Alaba (Out)"}},
-    {"domaci": "Bayern", "hostia": "Mainz", "kurz": 1.30, "tip": "1 + Over 1.5", "risk": 1, "liga": "Bundesliga", "stats": {"utok_domaci": 90, "utok_hostia": 40, "zranenia": "Coman (Quest)"}},
-    {"domaci": "Inter", "hostia": "Salernitana", "kurz": 1.28, "tip": "1", "risk": 1, "liga": "Serie A", "stats": {"utok_domaci": 82, "utok_hostia": 25, "zranenia": "Martinez (Fit)"}},
-
-    # STREDNÉ RIZIKO (Riziko 2)
-    {"domaci": "Arsenal", "hostia": "Chelsea", "kurz": 1.95, "tip": "1", "risk": 2, "liga": "Premier League", "stats": {"utok_domaci": 75, "utok_hostia": 65, "zranenia": "Saka (Fit)"}},
-    {"domaci": "Sevilla", "hostia": "Betis", "kurz": 2.10, "tip": "X (Remíza)", "risk": 2, "liga": "La Liga", "stats": {"utok_domaci": 55, "utok_hostia": 55, "zranenia": "Navas (Out)"}},
-    {"domaci": "Dortmund", "hostia": "Leipzig", "kurz": 2.05, "tip": "BTTS", "risk": 2, "liga": "Bundesliga", "stats": {"utok_domaci": 80, "utok_hostia": 82, "zranenia": "Reus (Bench)"}},
-    {"domaci": "Man Utd", "hostia": "PAOK", "kurz": 1.45, "tip": "1", "risk": 2, "liga": "Europa League", "stats": {"utok_domaci": 82, "utok_hostia": 40, "zranenia": "Maguire (Out)"}},
-
-    # VYSOKÉ RIZIKO (Riziko 3)
-    {"domaci": "Luton", "hostia": "Liverpool", "kurz": 6.50, "tip": "1X", "risk": 3, "liga": "Premier League", "stats": {"utok_domaci": 40, "utok_hostia": 85, "zranenia": "Salah (Out)"}},
-    {"domaci": "Monza", "hostia": "Juventus", "kurz": 3.40, "tip": "1", "risk": 3, "liga": "Serie A", "stats": {"utok_domaci": 45, "utok_hostia": 70, "zranenia": "Chiesa (Out)"}},
+    # DATA PRE ANALÝZU (Detailné)
+    {
+        "domaci": "Manchester United", "hostia": "PAOK", "kurz": 1.45, "tip": "Výhra United & Over 1.5", "risk": 1, "liga": "Europa League", "dovera": 88,
+        "stats": {"utok_domaci": 82, "utok_hostia": 40, "forma_domaci": "WWDLW", "forma_hostia": "LLDWL", "zranenia": "Man Utd: Maguire (Otázny), Shaw (Out)"},
+        "analyza_text": "United pod novým trénerom Amorimom doma dominuje. Old Trafford je pevnosť, zatiaľ čo PAOK vonku v Európe trpí.",
+        "analyza_body": [
+            "United má priemer 2.1 xG na domáci zápas.",
+            "PAOK inkasoval v 4 z 5 posledných zápasov.",
+            "Motivácia domácich potvrdiť postup."
+        ]
+    },
+    {
+        "domaci": "Lazio Rím", "hostia": "FC Porto", "kurz": 2.10, "tip": "Obaja dajú gól (BTTS)", "risk": 2, "liga": "Europa League", "dovera": 75,
+        "stats": {"utok_domaci": 78, "utok_hostia": 85, "forma_domaci": "WWWWL", "forma_hostia": "WWWWW", "zranenia": "Lazio: Immobile (lavička)"},
+        "analyza_text": "Súboj dvoch ofenzívne ladených tímov. Porto má smrtiacu formu, ale v Taliansku sa hrá ťažko.",
+        "analyza_body": [
+            "Lazio skórovalo v 90% domácich zápasov.",
+            "Porto má sériu 7 výhier v rade.",
+            "Obrany oboch tímov robia chyby pod tlakom."
+        ]
+    },
+    # ĎALŠIE DATA PRE GENERÁTOR TIKETOV (Jednoduchšie)
+    {"domaci": "Man City", "hostia": "Sheffield", "kurz": 1.18, "tip": "1", "risk": 1, "liga": "Premier League", "stats": {"utok_domaci": 88, "utok_hostia": 20, "forma_domaci": "WWWWW", "forma_hostia": "LLLLL", "zranenia": ""}, "analyza_text": "", "analyza_body": []},
+    {"domaci": "Bayern", "hostia": "Mainz", "kurz": 1.30, "tip": "1 + Over 2.5", "risk": 1, "liga": "Bundesliga", "stats": {"utok_domaci": 90, "utok_hostia": 40, "forma_domaci": "WLWWW", "forma_hostia": "LLLLL", "zranenia": ""}, "analyza_text": "", "analyza_body": []},
+    {"domaci": "Arsenal", "hostia": "Chelsea", "kurz": 1.95, "tip": "1", "risk": 2, "liga": "Premier League", "stats": {"utok_domaci": 75, "utok_hostia": 65, "forma_domaci": "WWDLW", "forma_hostia": "LLLLL", "zranenia": ""}, "analyza_text": "", "analyza_body": []},
+    {"domaci": "Luton", "hostia": "Liverpool", "kurz": 6.50, "tip": "1X", "risk": 3, "liga": "Premier League", "stats": {"utok_domaci": 40, "utok_hostia": 85, "forma_domaci": "LLWDL", "forma_hostia": "LLLLL", "zranenia": ""}, "analyza_text": "", "analyza_body": []},
 ]
 
-# 2. HTML GRAFIKA - MODRÁ CYBERPUNK (Rozšírená o tikety)
+# 2. HTML GRAFIKA
 html_content = """
 <!DOCTYPE html>
 <html lang="sk">
@@ -51,7 +63,6 @@ html_content = """
         
         /* Main Content */
         .main-content { flex: 1; padding: 40px; overflow-y: auto; background: #0b0c10; }
-        
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
         .header h1 { margin: 0; color: #fff; font-size: 28px; font-weight: 700; }
         
@@ -64,69 +75,81 @@ html_content = """
         }
         .btn-analyze:hover { transform: scale(1.05); background: #fff; }
 
-        /* KARTA ZÁPASU (Pôvodná Analysis) */
-        .match-card { 
-            background: #151b24; border-radius: 16px; margin-bottom: 30px; overflow: hidden; 
-            border: 1px solid #2c3e50; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-        }
-        
-        .match-header { 
-            background: linear-gradient(90deg, #0f141a 0%, #1a222e 100%); 
-            padding: 25px 30px; display: flex; justify-content: space-between; align-items: center; 
-            border-bottom: 1px solid #2c3e50;
-        }
-        .teams-title { font-size: 32px; font-weight: 800; color: white; letter-spacing: 1px; text-shadow: 0 0 20px rgba(0,0,0,0.5); }
-        .match-meta { font-size: 16px; color: #66fcf1; font-weight: bold; background: rgba(102, 252, 241, 0.1); padding: 8px 18px; border-radius: 20px;}
-        .match-body { padding: 30px; display: flex; gap: 40px; flex-wrap: wrap; }
-        .col-left { flex: 1; min-width: 300px; border-right: 1px solid #2c3e50; padding-right: 30px; }
-        .col-right { flex: 1; min-width: 300px; }
-        .form-box { display: flex; gap: 5px; margin-top: 5px; }
-        .form-badge { width: 25px; height: 25px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: black; }
-        .win { background: #2ecc71; } .draw { background: #f1c40f; } .loss { background: #e74c3c; }
-        .stat-group { margin-bottom: 20px; }
-        .stat-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; color: #888; }
-        .progress-bg { height: 8px; background: #222; border-radius: 4px; overflow: hidden; }
-        .progress-fill { height: 100%; background: #66fcf1; border-radius: 4px; }
-        .analysis-section h4 { color: #66fcf1; margin: 0 0 15px 0; text-transform: uppercase; font-size: 14px; letter-spacing: 1px; }
-        .analysis-text { font-size: 15px; line-height: 1.6; color: #dcdcdc; }
-        .ai-box { background: rgba(102, 252, 241, 0.05); padding: 20px; border-radius: 12px; border: 1px solid rgba(102, 252, 241, 0.2); display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
-        .ai-tip { font-size: 24px; font-weight: 800; color: #fff; }
-        .ai-confidence { background: #66fcf1; color: #000; padding: 5px 15px; border-radius: 5px; font-weight: bold; }
-
-        /* --- NOVÉ PRVKY PRE TIKETY (Style match with Cyberpunk Blue) --- */
-        
-        /* Ticket Slip Design */
-        .ticket-wrapper {
-            max-width: 600px; margin: 0 auto;
-            background: #151b24; border: 2px solid #66fcf1; border-radius: 12px;
-            box-shadow: 0 0 40px rgba(102, 252, 241, 0.15); overflow: hidden;
+        /* --- ŠTÝLY PRE VIP ANALÝZU (PODĽA OBRÁZKA) --- */
+        .analysis-card {
+            background: #11161d; border-radius: 12px; margin-bottom: 30px; 
+            border: 1px solid #2c3e50; padding: 0; overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             animation: slideUp 0.5s ease;
         }
+        
+        .ac-header {
+            padding: 20px 30px; background: #151b24; border-bottom: 1px solid #2c3e50;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .ac-teams { font-size: 28px; font-weight: 800; color: #fff; }
+        .ac-vs { color: #888; font-size: 20px; font-weight: 400; margin: 0 10px; }
+        .ac-odds-badge { background: #1a2634; color: #66fcf1; padding: 8px 15px; border-radius: 8px; font-weight: bold; border: 1px solid #2c3e50; }
+
+        .ac-body { padding: 30px; display: flex; gap: 40px; }
+        .ac-left { flex: 1; border-right: 1px solid #2c3e50; padding-right: 30px; }
+        .ac-right { flex: 1.2; padding-left: 10px; }
+
+        /* Forma Dots (Obrázok style) */
+        .ac-stat-title { font-size: 12px; color: #888; margin-bottom: 10px; }
+        .ac-form-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .ac-team-label { font-size: 14px; color: #ccc; margin-bottom: 5px; display: block; }
+        .ac-dots { display: flex; gap: 5px; }
+        .ac-dot { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: #000; }
+        .ac-dot.v { background: #00ff88; } /* Výhra - Zelená */
+        .ac-dot.r { background: #ffcc00; } /* Remíza - Žltá */
+        .ac-dot.p { background: #ff4444; } /* Prehra - Červená */
+
+        /* Progress Bar (Obrázok style) */
+        .ac-progress-container { display: flex; height: 8px; background: #222; border-radius: 4px; overflow: hidden; margin-top: 5px; }
+        .ac-bar-home { background: #66fcf1; height: 100%; }
+        .ac-bar-away { background: #ff4444; height: 100%; }
+        .ac-stat-val { font-size: 12px; color: #888; text-align: right; margin-top: 5px; }
+
+        /* Injuries */
+        .ac-injuries { color: #ff4444; font-size: 13px; margin-top: 5px; }
+
+        /* Right Side Analysis */
+        .ac-ai-title { color: #ff66cc; font-weight: bold; font-size: 12px; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
+        .ac-text { font-size: 14px; line-height: 1.6; color: #ccc; margin-bottom: 15px; }
+        .ac-list { list-style: none; padding: 0; margin-bottom: 20px; }
+        .ac-list li { margin-bottom: 8px; padding-left: 15px; position: relative; color: #aaa; font-size: 13px; }
+        .ac-list li::before { content: "•"; color: #66fcf1; position: absolute; left: 0; font-weight: bold; }
+
+        /* Recommendation Box (Obrázok style) */
+        .ac-tip-box { 
+            background: #1a222e; border: 1px solid #2c3e50; border-radius: 8px; padding: 15px; 
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .ac-tip-label { font-size: 10px; color: #888; text-transform: uppercase; display: block; margin-bottom: 2px; }
+        .ac-tip-value { font-size: 20px; font-weight: 800; color: #fff; }
+        .ac-conf-badge { background: #66fcf1; color: #000; padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 14px; }
+
+        /* --- ŠTÝLY PRE TIKETY A GENERÁTOR (Zachované) --- */
+        .ticket-wrapper { max-width: 600px; margin: 0 auto; background: #151b24; border: 2px solid #66fcf1; border-radius: 12px; box-shadow: 0 0 40px rgba(102, 252, 241, 0.15); }
         .ticket-header { background: rgba(102, 252, 241, 0.1); padding: 20px; text-align: center; border-bottom: 1px solid #66fcf1; }
-        .ticket-title { font-size: 24px; font-weight: 800; color: #66fcf1; letter-spacing: 2px; margin: 0; }
+        .ticket-title { font-size: 24px; font-weight: 800; color: #66fcf1; margin: 0; }
         .ticket-body { padding: 20px; }
         .ticket-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #333; padding: 15px 0; }
-        .ticket-row:last-child { border-bottom: none; }
         .t-match { font-size: 16px; font-weight: bold; color: #fff; }
         .t-tip { font-size: 13px; color: #888; margin-top: 4px; }
         .t-odds { background: #0b0c10; color: #66fcf1; padding: 5px 10px; border-radius: 4px; border: 1px solid #333; font-weight: bold; }
         .ticket-footer { background: #0b0c10; padding: 20px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #333; }
-        .t-total { font-size: 22px; font-weight: bold; color: #fff; }
         .t-val { color: #66fcf1; font-weight: 900; font-size: 28px; }
 
-        /* Custom Generator Inputs */
         .gen-controls { max-width: 700px; margin: 0 auto; background: #151b24; padding: 30px; border-radius: 12px; border: 1px solid #333; }
-        .control-row { margin-bottom: 20px; }
-        .c-label { display: block; color: #66fcf1; font-size: 12px; font-weight: bold; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-        select { width: 100%; padding: 15px; background: #0b0c10; border: 1px solid #333; color: #fff; border-radius: 8px; font-size: 16px; outline: none; transition: 0.3s; }
-        select:focus { border-color: #66fcf1; box-shadow: 0 0 10px rgba(102, 252, 241, 0.2); }
+        .c-label { display: block; color: #66fcf1; font-size: 12px; font-weight: bold; margin-bottom: 8px; text-transform: uppercase; }
+        select { width: 100%; padding: 15px; background: #0b0c10; border: 1px solid #333; color: #fff; border-radius: 8px; font-size: 16px; outline: none; }
 
         .page { display: none; }
         .page.active { display: block; animation: fadeIn 0.4s; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
         .chart-box { background: #151b24; padding: 25px; border-radius: 16px; border: 1px solid #2c3e50; height: 350px; }
     </style>
 </head>
@@ -134,15 +157,12 @@ html_content = """
 
     <div class="sidebar">
         <div class="logo">⚡ BET PRO</div>
-        
         <div class="menu-label">Hlavné</div>
         <div class="menu-item active" onclick="showPage('home', this)">🏠 Dashboard</div>
         <div class="menu-item" onclick="showPage('generator', this)">📊 VIP Analýza</div>
-        
         <div class="menu-label">Tikety</div>
         <div class="menu-item" onclick="loadTiketDna(this)">🎯 Tiket Dňa</div>
         <div class="menu-item" onclick="showPage('custom-ticket', this)">🛠️ Vlastný Generátor</div>
-        
         <div class="menu-label">Dáta</div>
         <div class="menu-item" onclick="showPage('results-page', this)">✅ Výsledky</div>
     </div>
@@ -151,7 +171,6 @@ html_content = """
         
         <div id="home" class="page active">
             <div class="header"><h1>Vitaj späť, Trader.</h1></div>
-            
             <div style="display:flex; gap:20px; margin-bottom: 30px;">
                 <div style="background:#151b24; padding:25px; flex:1; border-radius:16px; border:1px solid #2c3e50;">
                     <h3 style="color:#888; font-size:14px; margin-top:0;">DNEŠNÝ POTENCIÁL</h3>
@@ -164,11 +183,7 @@ html_content = """
                     <small style="color:#2ecc71">▲ +12.5% tento týždeň</small>
                 </div>
             </div>
-            
-            <div class="chart-box">
-                <h3 style="color:#fff; margin-top:0;">Vývoj Zisku</h3>
-                <canvas id="profitChart"></canvas>
-            </div>
+            <div class="chart-box"><canvas id="profitChart"></canvas></div>
         </div>
 
         <div id="generator" class="page">
@@ -187,17 +202,16 @@ html_content = """
 
         <div id="custom-ticket" class="page">
             <div class="header"><h1>🛠️ Vlastný Tiket</h1></div>
-            
             <div class="gen-controls">
-                <div class="control-row">
+                <div style="margin-bottom:20px;">
                     <label class="c-label">Riziko</label>
                     <select id="riskLevel">
-                        <option value="1">🟢 Nízke (Kurzy 1.2 - 1.5)</option>
-                        <option value="2">🟡 Stredné (Kurzy 1.8 - 2.2)</option>
-                        <option value="3">🔴 Vysoké (Kurzy 3.0+)</option>
+                        <option value="1">🟢 Nízke (1.2 - 1.5)</option>
+                        <option value="2">🟡 Stredné (1.8 - 2.2)</option>
+                        <option value="3">🔴 Vysoké (3.0+)</option>
                     </select>
                 </div>
-                <div class="control-row">
+                <div style="margin-bottom:20px;">
                     <label class="c-label">Počet zápasov</label>
                     <select id="matchCount">
                         <option value="2">2 Zápasy</option>
@@ -205,35 +219,29 @@ html_content = """
                         <option value="5">5 Zápasov</option>
                     </select>
                 </div>
-                <div class="control-row">
+                <div style="margin-bottom:20px;">
                     <label class="c-label">Liga</label>
                     <select id="leagueSelect">
                         <option value="all">Všetky Ligy</option>
                         <option value="Premier League">Premier League</option>
                         <option value="La Liga">La Liga</option>
                         <option value="Bundesliga">Bundesliga</option>
-                        <option value="Serie A">Serie A</option>
                     </select>
                 </div>
                 <button class="btn-analyze" style="margin-bottom:0;" onclick="generujVlastny()">Vygenerovať</button>
             </div>
-
             <div id="custom-ticket-result" style="margin-top: 50px;"></div>
         </div>
 
         <div id="results-page" class="page">
             <div class="header"><h1>Výkonnosť Modelu</h1></div>
-            <p>História posledných AI predikcií.</p>
-            <div class="match-card">
-                <div class="match-header"><div class="teams-title">Včerajší Výkon</div></div>
-                <div class="match-body"><p style="color:#aaa;">Načítavam dáta...</p></div>
-            </div>
+            <p style="color:#aaa;">Načítavam dáta...</p>
         </div>
 
     </div>
 
     <script>
-        // Graf (Nezmenený)
+        // Graf
         document.addEventListener("DOMContentLoaded", function() {
             const ctx = document.getElementById('profitChart').getContext('2d');
             new Chart(ctx, {
@@ -255,49 +263,106 @@ html_content = """
             document.getElementById(id).classList.add('active');
         }
 
-        // --- 1. VIP ANALÝZA (Pôvodná funkcia) ---
+        // --- 1. VIP ANALÝZA (Dizajn presne podľa obrázka) ---
         async function generujAnalyzu() {
             const out = document.getElementById('analysis-output');
             out.innerHTML = '<p style="text-align:center; color:#66fcf1">Analyzujem...</p>';
-            const res = await fetch('/api/generuj-tiket'); // Pôvodný endpoint pre analýzu
+            const res = await fetch('/api/generuj-tiket'); 
             const data = await res.json();
             
             let html = '';
-            // (Tu používam skrátenú verziu tvojej karty z predchádzajúceho kódu, aby to nebolo extrémne dlhé)
+            // Berieme len prvé 2 zápasy pre ukážku, ktoré majú vyplnené detaily
             data.slice(0, 2).forEach(m => {
+                
+                // Helper pre guličky (V/R/P)
+                const circles = (formStr) => {
+                    let h = '';
+                    for (let c of formStr) {
+                        let cl = c === 'W' ? 'v' : (c === 'L' ? 'p' : 'r'); // css triedy
+                        let txt = c === 'W' ? 'V' : (c === 'L' ? 'P' : 'R'); // text
+                        h += `<div class="ac-dot ${cl}">${txt}</div>`;
+                    }
+                    return h;
+                };
+
+                // Helper pre body analýzy
+                let listHtml = '';
+                if(m.analyza_body) {
+                    m.analyza_body.forEach(li => listHtml += `<li>${li}</li>`);
+                }
+
                 html += `
-                <div class="match-card">
-                    <div class="match-header"><div class="teams-title">${m.domaci} vs ${m.hostia}</div></div>
-                    <div class="match-body">
-                        <div class="col-left">
-                            <div class="stat-group"><div class="stat-label"><span>Útok</span><span>${m.stats.utok_domaci}%</span></div><div class="progress-bg"><div class="progress-fill" style="width:${m.stats.utok_domaci}%"></div></div></div>
+                <div class="analysis-card">
+                    <div class="ac-header">
+                        <div class="ac-teams">${m.domaci} <span class="ac-vs">vs</span> ${m.hostia}</div>
+                        <div class="ac-odds-badge">Kurz: ${m.kurz}</div>
+                    </div>
+                    <div class="ac-body">
+                        
+                        <div class="ac-left">
+                            <div style="margin-bottom: 25px;">
+                                <div class="ac-stat-title">Forma (Posledných 5)</div>
+                                <div class="ac-form-row">
+                                    <div><span class="ac-team-label">${m.domaci}</span><div class="ac-dots">${circles(m.stats.forma_domaci)}</div></div>
+                                    <div style="text-align:right;"><span class="ac-team-label">${m.hostia}</span><div class="ac-dots" style="justify-content:flex-end;">${circles(m.stats.forma_hostia)}</div></div>
+                                </div>
+                            </div>
+
+                            <div style="margin-bottom: 25px;">
+                                <div class="ac-stat-title">Sila Útoku (xG Power)</div>
+                                <div class="ac-progress-container">
+                                    <div class="ac-bar-home" style="width:${m.stats.utok_domaci}%"></div>
+                                    <div class="ac-bar-away" style="width:${m.stats.utok_hostia}%"></div>
+                                </div>
+                                <div class="ac-stat-val">${m.stats.utok_domaci}% vs ${m.stats.utok_hostia}%</div>
+                            </div>
+
+                            <div>
+                                <div class="ac-stat-title">Absencie (Zranenia)</div>
+                                <div class="ac-injuries">${m.stats.zranenia}</div>
+                            </div>
                         </div>
-                        <div class="col-right">
-                            <div class="ai-box"><div>Tip: <span style="color:#fff">${m.tip}</span></div><div class="ai-confidence">${m.risk === 1 ? '90%' : '75%'}</div></div>
+
+                        <div class="ac-right">
+                            <div class="ac-ai-title">🧠 AI DEEP DIVE ANALÝZA</div>
+                            <div class="ac-text">${m.analyza_text}</div>
+                            <ul class="ac-list">
+                                ${listHtml}
+                            </ul>
+
+                            <div class="ac-tip-box">
+                                <div>
+                                    <span class="ac-tip-label">ODPORÚČANÝ TIP</span>
+                                    <div class="ac-tip-value">${m.tip}</div>
+                                </div>
+                                <div style="text-align:right;">
+                                    <span class="ac-tip-label">Dôvera</span>
+                                    <div class="ac-conf-badge">${m.dovera}%</div>
+                                </div>
+                            </div>
                         </div>
+
                     </div>
                 </div>`;
             });
             out.innerHTML = html;
         }
 
-        // --- 2. TIKET DŇA (Nová funkcia) ---
+        // --- 2. TIKET DŇA (Logika) ---
         async function loadTiketDna(el) {
             showPage('ticket-day', el);
             const div = document.getElementById('ticket-day-result');
             div.innerHTML = '<p style="text-align:center; color:#66fcf1">Generujem Tiket Dňa...</p>';
-            
             const res = await fetch('/api/tiket-dna');
             const data = await res.json();
             renderTicket(data, div, "VIP TIKET DŇA");
         }
 
-        // --- 3. VLASTNÝ GENERÁTOR (Nová funkcia) ---
+        // --- 3. VLASTNÝ GENERÁTOR (Logika) ---
         async function generujVlastny() {
             const risk = document.getElementById('riskLevel').value;
             const count = document.getElementById('matchCount').value;
             const league = document.getElementById('leagueSelect').value;
-            
             const div = document.getElementById('custom-ticket-result');
             div.innerHTML = '<p style="text-align:center; color:#66fcf1">Skladám tiket...</p>';
             
@@ -308,82 +373,44 @@ html_content = """
 
         // Pomocná funkcia na vykreslenie tiketu
         function renderTicket(data, element, title) {
-            if (data.length === 0) { element.innerHTML = "Žiadne zápasy."; return; }
-            
-            let rows = '';
-            let total = 1;
-            data.forEach(m => {
-                total *= m.kurz;
-                rows += `
-                <div class="ticket-row">
-                    <div>
-                        <div class="t-match">${m.domaci} - ${m.hostia}</div>
-                        <div class="t-tip">Tip: ${m.tip}</div>
-                    </div>
-                    <div class="t-odds">${m.kurz}</div>
-                </div>`;
-            });
-
-            element.innerHTML = `
-            <div class="ticket-wrapper">
-                <div class="ticket-header"><h2 class="ticket-title">${title}</h2></div>
-                <div class="ticket-body">${rows}</div>
-                <div class="ticket-footer">
-                    <div class="t-total">CELKOVÝ KURZ</div>
-                    <div class="t-val">${total.toFixed(2)}</div>
-                </div>
-            </div>`;
+            if (data.length === 0) { element.innerHTML = "<p style='text-align:center;color:#888'>Žiadne zápasy.</p>"; return; }
+            let rows = ''; let total = 1;
+            data.forEach(m => { total *= m.kurz; rows += `<div class="ticket-row"><div><div class="t-match">${m.domaci} - ${m.hostia}</div><div class="t-tip">Tip: ${m.tip}</div></div><div class="t-odds">${m.kurz}</div></div>`; });
+            element.innerHTML = `<div class="ticket-wrapper"><div class="ticket-header"><h2 class="ticket-title">${title}</h2></div><div class="ticket-body">${rows}</div><div class="ticket-footer"><div class="t-match">CELKOVÝ KURZ</div><div class="t-val">${total.toFixed(2)}</div></div></div>`;
         }
     </script>
 </body>
 </html>
 """
 
-# 3. BACKEND (Nová logika pre triedenie tiketov)
+# 3. BACKEND (Logika)
 def get_db():
     db = database.SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    try: yield db
+    finally: db.close()
 
 @app.get("/", response_class=HTMLResponse)
-def home(): 
-    return html_content
+def home(): return html_content
 
-# Pôvodný endpoint (pre sekciu Analýza) - vráti všetko
 @app.get("/api/generuj-tiket")
 def get_all_matches():
     return MATCH_DATABASE
 
-# Nový endpoint: TIKET DŇA (Len risk 1)
 @app.get("/api/tiket-dna")
 def get_tiket_dna():
     safe_matches = [m for m in MATCH_DATABASE if m['risk'] == 1]
-    return safe_matches[:3] # Vráti max 3 tutovky
+    return safe_matches[:3]
 
-# Nový endpoint: VLASTNÝ TIKET
 @app.get("/api/vlastny-tiket")
 def get_custom_ticket(risk: int = 1, count: int = 2, league: str = "all"):
-    # 1. Filter podľa rizika
     filtered = [m for m in MATCH_DATABASE if m['risk'] == risk]
-    
-    # 2. Filter podľa ligy
-    if league != "all":
-        filtered = [m for m in filtered if m['liga'] == league]
-    
-    # 3. Ak nemáme dosť zápasov pre konkrétnu ligu, doplň z iných líg (fallback)
-    if len(filtered) < count:
-        filtered = [m for m in MATCH_DATABASE if m['risk'] == risk]
-        
-    # 4. Náhodný výber
-    if len(filtered) >= count:
-        return random.sample(filtered, count)
+    if league != "all": filtered = [m for m in filtered if m.get('liga') == league]
+    if len(filtered) < count: filtered = [m for m in MATCH_DATABASE if m['risk'] == risk] 
+    if len(filtered) >= count: return random.sample(filtered, count)
     return filtered
 
 class WhopInput(BaseModel):
     message: str
 
 @app.post("/whop")
-def whop(data: WhopInput): 
-    return {"status": "ok"}
+def whop(data: WhopInput): return {"status": "ok"}
