@@ -14,16 +14,14 @@ app = FastAPI()
 # ==========================================
 # 🔑 NASTAVENIE API (TU VLOŽ SVOJ KĽÚČ)
 # ==========================================
-API_KEY = "3e42c726ab364fb9eeede03b0017964c"  # <-- SEM VLOŽ KĽÚČ Z MAILU
+API_KEY = "3e42c726ab364fb9eeede03b0017964c" 
 # ==========================================
 
 # Pomocná funkcia na stiahnutie dát z API
 def fetch_live_data():
     if API_KEY == "VLOZ_SVOJ_API_KLUC_SEM":
-        # Fallback ak užívateľ ešte nevložil kľúč - vráti demo dáta aby appka nepadla
         return generate_demo_data()
 
-    # Sťahujeme futbalové zápasy (UK, EU ligy)
     url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?regions=eu&markets=h2h&apiKey={API_KEY}"
     
     try:
@@ -31,16 +29,11 @@ def fetch_live_data():
         data = response.json()
         
         matches = []
-        for item in data[:15]: # Zoberieme prvých 15 zápasov
-            # Získame kurzy
+        for item in data[:15]: 
             try:
                 bookmakers = item.get('bookmakers', [])
                 if not bookmakers: continue
-                
-                # Berieme prvú stávkovú kanceláriu
                 odds = bookmakers[0]['markets'][0]['outcomes']
-                
-                # Nájdenie kurzov pre 1 (Domáci), X (Remíza), 2 (Hostia)
                 home_team = item['home_team']
                 away_team = item['away_team']
                 
@@ -49,7 +42,6 @@ def fetch_live_data():
                 
                 if odd_1 == 0 or odd_2 == 0: continue
 
-                # LOGIKA AI: Určenie rizika podľa kurzu
                 risk = 2
                 tip = "X"
                 dovera = 50
@@ -76,8 +68,6 @@ def fetch_live_data():
                     dovera = int(random.uniform(40, 60))
                     analyza = "Vysoké kurzy na oboch stranách naznačujú otvorený futbal."
 
-                # Generovanie "Fake" štatistík (lebo free API nedáva xG a zranenia)
-                # Ale vyzerá to profesionálne
                 stats = {
                     "utok_domaci": int(100 / odd_1) if odd_1 > 1 else 90,
                     "utok_hostia": int(100 / odd_2) if odd_2 > 1 else 90,
@@ -102,22 +92,18 @@ def fetch_live_data():
                         "AI model detekoval hodnotu v kurze."
                     ]
                 })
-
-            except Exception as e:
+            except Exception:
                 continue
-                
         return matches
-
     except:
         return generate_demo_data()
 
 def generate_demo_data():
-    # Fallback ak API nefunguje alebo nie je kľúč
     return [
         {"domaci": "API NIE JE NASTAVENÉ", "hostia": "VLOŽ KĽÚČ", "kurz": 1.00, "tip": "Nastav API kľúč", "risk": 1, "liga": "System", "dovera": 0, "stats": {"utok_domaci":0, "utok_hostia":0, "forma_domaci": "LLLLL", "forma_hostia": "LLLLL", "zranenia": "Chýba API Key"}, "analyza_text": "Prosím, otvor main.py a vlož svoj API kľúč z the-odds-api.com", "analyza_body": []}
     ]
 
-# 2. HTML GRAFIKA (MODRÁ CYBERPUNK - NEZMENENÁ)
+# 2. HTML GRAFIKA
 html_content = """
 <!DOCTYPE html>
 <html lang="sk">
@@ -146,7 +132,6 @@ html_content = """
         .btn-analyze { background: var(--primary); border: none; padding: 18px 50px; font-size: 16px; font-weight: 800; color: #0b0c10; border-radius: 50px; cursor: pointer; box-shadow: 0 0 25px rgba(102, 252, 241, 0.3); transition: 0.2s; display: block; margin: 0 auto 40px auto; text-transform: uppercase; }
         .btn-analyze:hover { transform: scale(1.05); background: #fff; }
         
-        /* VIP ANALÝZA */
         .analysis-card { background: #11161d; border-radius: 12px; margin-bottom: 30px; border: 1px solid #2c3e50; padding: 0; overflow: hidden; animation: slideUp 0.5s ease; }
         .ac-header { padding: 20px 30px; background: #151b24; border-bottom: 1px solid #2c3e50; display: flex; justify-content: space-between; align-items: center; }
         .ac-teams { font-size: 28px; font-weight: 800; color: #fff; }
@@ -174,7 +159,6 @@ html_content = """
         .ac-tip-value { font-size: 22px; font-weight: 800; color: #fff; }
         .ac-conf-badge { background: var(--primary); color: #000; padding: 6px 12px; border-radius: 6px; font-weight: 800; font-size: 16px; }
 
-        /* TIKETY */
         .ticket-wrapper { max-width: 600px; margin: 0 auto; background: #151b24; border: 2px solid var(--primary); border-radius: 12px; box-shadow: 0 0 50px rgba(102, 252, 241, 0.15); animation: slideUp 0.5s ease; }
         .ticket-header { background: rgba(102, 252, 241, 0.1); padding: 25px; text-align: center; border-bottom: 1px solid var(--primary); }
         .ticket-title { font-size: 26px; font-weight: 900; color: var(--primary); margin: 0; letter-spacing: 2px; text-transform: uppercase; }
@@ -254,7 +238,6 @@ html_content = """
             const ctx = document.getElementById('profitChart').getContext('2d');
             new Chart(ctx, { type: 'line', data: { labels: ['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'], datasets: [{ label: 'Zisk', data: [2100, 2150, 2120, 2250, 2300, 2380, 2450], borderColor: '#66fcf1', backgroundColor: 'rgba(102, 252, 241, 0.1)', borderWidth: 3, tension: 0.4, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#2c3e50' }, ticks: { color: '#888' } }, x: { grid: { display: false }, ticks: { color: '#888' } } } } });
             
-            // Get count
             const res = await fetch('/api/generuj-tiket?limit=1');
             const data = await res.json();
             if(data.length > 0 && data[0].domaci !== "API NIE JE NASTAVENÉ") {
@@ -328,12 +311,17 @@ html_content = """
 </html>
 """
 
-# 3. BACKEND ROUTES
+# 3. BACKEND ROUTES (OPRAVENÁ SYNTAX)
 def get_db():
-    db = database.SessionLocal(); try: yield db; finally: db.close()
+    db = database.SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @app.get("/", response_class=HTMLResponse)
-def home(): return html_content
+def home(): 
+    return html_content
 
 @app.get("/api/generuj-tiket")
 def get_all_matches(limit: int = 10):
@@ -349,11 +337,12 @@ def get_tiket_dna():
 def get_custom_ticket(risk: int = 1, count: int = 2):
     matches = fetch_live_data()
     filtered = [m for m in matches if m['risk'] == risk]
-    if len(filtered) < count: filtered = matches # Fallback
+    if len(filtered) < count: filtered = matches
     return filtered[:count]
 
 class WhopInput(BaseModel):
     message: str
 
 @app.post("/whop")
-def whop(data: WhopInput): return {"status": "ok"}
+def whop(data: WhopInput): 
+    return {"status": "ok"}
