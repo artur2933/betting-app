@@ -7,14 +7,11 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from dateutil import parser 
-
-# --- TENTO KÓD UŽ NEOBSAHUJE ŽIADNE "from backend import..." ---
 
 app = FastAPI()
 
 # ==========================================
-# 🔑 API KĽÚČE
+# 🔑 API KĽÚČE (VLOŽ OBA SEM!)
 # ==========================================
 # 1. Dáta (Kurzy): https://the-odds-api.com/
 ODDS_API_KEY = "3e42c726ab364fb9eeede03b0017964c"    
@@ -23,7 +20,7 @@ ODDS_API_KEY = "3e42c726ab364fb9eeede03b0017964c"
 GEMINI_API_KEY = "AIzaSyCreRpXTUwxzJegxQKUJ2RiX5BwSagdljg"    
 # ==========================================
 
-# Nastavenie Gemini
+# Nastavenie Gemini (ak je kľúč zadaný)
 if GEMINI_API_KEY != "AIzaSyCreRpXTUwxzJegxQKUJ2RiX5BwSagdljg":
     try:
         genai.configure(api_key=GEMINI_API_KEY)
@@ -32,10 +29,15 @@ if GEMINI_API_KEY != "AIzaSyCreRpXTUwxzJegxQKUJ2RiX5BwSagdljg":
 
 CACHE = {"data": [], "last_update": 0}
 
-# --- 1. SMART LOGIC ---
+# --- 1. SMART LOGIC (Matematika) ---
 def calculate_smart_stats(o1, o2):
-    prob_h = (1 / o1) * 100
-    prob_a = (1 / o2) * 100
+    """Vypočíta štatistiky na základe kurzov"""
+    try:
+        prob_h = (1 / o1) * 100
+        prob_a = (1 / o2) * 100
+    except ZeroDivisionError:
+        prob_h, prob_a = 50, 50
+    
     att_h = min(99, int(prob_h + random.randint(-5, 5)))
     att_a = min(99, int(prob_a + random.randint(-5, 5)))
     
@@ -51,8 +53,10 @@ def calculate_smart_stats(o1, o2):
         "zranenia": random.choice(["Bez absencií", "Otázny štart kapitána", "Kompletná zostava", "Chýba najlepší strelec"])
     }
 
-# --- 2. AI ENGINE ---
+# --- 2. AI ENGINE (Gemini Texty) ---
 def get_ai_text(home, away, o1, o2, tip):
+    """Vygeneruje text pomocou Gemini alebo fallback"""
+    
     default_text = f"Na základe kurzov {o1} vs {o2} je tip '{tip}' štatisticky najpravdepodobnejší."
     default_body = ["Hodnota v kurze.", "Forma tímov zodpovedá predikcii.", "Dôležitý zápas."]
 
@@ -69,37 +73,56 @@ def get_ai_text(home, away, o1, o2, tip):
         """
         response = model.generate_content(prompt)
         text_raw = response.text.split('\n')
+        
         main_text = text_raw[0]
-        body_points = [line.strip('-• ') for line in text_raw[1:] if line.strip()][:3]
+        # Vyčistenie odrážok
+        body_points = [line.strip('-•* ') for line in text_raw[1:] if line.strip()]
+        
         if not body_points: body_points = default_body
-        return main_text, body_points
+        return main_text, body_points[:3]
+
     except:
         return default_text, default_body
 
 def get_live_data():
+    # Cache
     if time.time() - CACHE["last_update"] < 3600 and CACHE["data"]:
         return CACHE["data"]
 
+    # Demo fallback
     if ODDS_API_KEY == "VLOZ_SVOJ_ODDS_API_KLUC_SEM":
         return generate_demo_data()
 
     try:
+        # Sťahujeme dáta z API
+        # Poznámka: Vo free verzii Odds API je limitovaný počet requestov, preto sťahujeme len jednu ligu naraz
+        # alebo zoznam líg oddelený čiarkou. Tu dáme EPL ako default.
         url = f"https://api.the-odds-api.com/v4/sports/soccer_epl/odds/?regions=eu&markets=h2h&apiKey={ODDS_API_KEY}"
-        response = requests.get(url)
-        data = response.json()
         
+        response = requests.get(url)
+        if response.status_code != 200:
+             return generate_demo_data() # Ak API zlyhá (napr. minieš limit), vráti demo
+
+        data = response.json()
         matches = []
-        for item in data[:10]: 
+        
+        # Spracujeme max 8 zápasov
+        for item in data[:8]: 
             try:
                 bookmakers = item.get('bookmakers', [])
                 if not bookmakers: continue
+                
                 odds = bookmakers[0]['markets'][0]['outcomes']
                 home = item['home_team']
                 away = item['away_team']
+                
+                # Získanie kurzov
                 o1 = next((x['price'] for x in odds if x['name'] == home), 0)
                 o2 = next((x['price'] for x in odds if x['name'] == away), 0)
+                
                 if o1 == 0 or o2 == 0: continue
 
+                # Určenie rizika a tipu
                 risk = 1; tip = "1"; dovera = 75
                 if o1 < 1.50: risk = 1; tip = "1"; dovera = random.randint(88, 95)
                 elif o2 < 1.50: risk = 1; tip = "2"; dovera = random.randint(88, 95)
@@ -112,16 +135,20 @@ def get_live_data():
 
                 matches.append({
                     "domaci": home, "hostia": away, 
-                    "kurz": o1 if tip=="1" else (o2 if tip=="2" else 3.10),
+                    "kurz": o1 if tip == "1" else (o2 if tip == "2" else 3.10),
                     "tip": tip, "risk": risk, "liga": item['sport_title'], 
                     "dovera": dovera, "stats": stats, 
                     "analyza_text": analyza_text, "analyza_body": analyza_body
                 })
             except: continue
         
-        CACHE["data"] = matches
-        CACHE["last_update"] = time.time()
-        return matches
+        if matches:
+            CACHE["data"] = matches
+            CACHE["last_update"] = time.time()
+            return matches
+        else:
+             return generate_demo_data()
+
     except: return generate_demo_data()
 
 def generate_demo_data():
@@ -140,14 +167,15 @@ def get_ticket_day():
 @app.get("/api/vlastny-tiket")
 def get_custom(risk: int = 1):
     data = get_live_data()
-    return [m for m in data if m['risk'] == risk]
+    filtered = [m for m in data if m['risk'] == int(risk)]
+    return filtered if filtered else data[:2] # Fallback ak nie sú zápasy pre daný risk
 
 class WhopInput(BaseModel): message: str
 @app.post("/whop")
 def whop(data: WhopInput): return {"status": "ok"}
 
 
-# --- HTML FRONTEND ---
+# --- HTML FRONTEND (BLUE CYBERPUNK - TVOJA OBĽÚBENÁ) ---
 html_content = """
 <!DOCTYPE html>
 <html lang="sk">
@@ -169,6 +197,7 @@ html_content = """
         .main-content { flex: 1; padding: 40px; overflow-y: auto; background: radial-gradient(circle at top right, #1f2833 0%, #0b0c10 80%); }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 1px solid #333; padding-bottom: 20px; }
         
+        /* GEMINI AI BADGE */
         .gemini-badge { 
             background: linear-gradient(45deg, #4285f4, #9b72cb); color: white; 
             padding: 5px 10px; border-radius: 4px; font-size: 10px; font-weight: bold; letter-spacing: 1px;
@@ -187,6 +216,8 @@ html_content = """
         .ac-list li:before { content: "• "; color: var(--primary); }
         
         .ac-tip-box { background: #1a222e; padding: 15px; border-left: 4px solid var(--primary); display: flex; justify-content: space-between; align-items: center; }
+        .ac-tip-value { font-size: 20px; font-weight: 800; color: #fff; }
+        .ac-conf-badge { background: var(--primary); color: #000; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
         
         .btn-analyze { background: var(--primary); border: none; padding: 15px 40px; font-size: 16px; font-weight: 800; color: #0b0c10; border-radius: 50px; cursor: pointer; display: block; margin: 0 auto; box-shadow: 0 0 20px rgba(102, 252, 241, 0.4); transition: 0.3s; }
         .btn-analyze:hover { transform: scale(1.05); background: white; }
@@ -197,6 +228,8 @@ html_content = """
         /* TICKET STYLE */
         .ticket-wrapper { max-width: 600px; margin: 0 auto 30px auto; background: #151b24; border: 2px solid var(--primary); border-radius: 12px; overflow: hidden; animation: slideUp 0.5s ease; box-shadow: 0 0 40px rgba(102, 252, 241, 0.2); }
         .ticket-header { background: rgba(102, 252, 241, 0.1); padding: 20px; text-align: center; border-bottom: 1px solid var(--primary); }
+        .ticket-title { font-size: 24px; font-weight: 900; color: var(--primary); margin: 0; letter-spacing: 2px; text-transform: uppercase; }
+        .ticket-body { padding: 20px; }
         .ticket-row { display: flex; justify-content: space-between; padding: 15px; border-bottom: 1px dashed #444; align-items: center; }
         .ticket-footer { background: #0b0c10; padding: 20px; display: flex; justify-content: space-between; font-weight: bold; font-size: 20px; color: var(--primary); border-top: 1px solid #333; }
         .btn-ticket { width: 100%; padding: 18px; background: var(--primary); border: none; font-weight: 800; cursor: pointer; color: black; font-size: 18px; text-transform: uppercase; }
@@ -214,6 +247,9 @@ html_content = """
         th { text-align: left; padding: 10px; border-bottom: 1px solid #333; color:#666; font-size:10px; text-transform:uppercase; }
         td { padding: 10px; border-bottom: 1px solid #222; }
         .win { color: var(--green); font-weight: bold; } .lose { color: var(--red); font-weight: bold; } .pending { color: var(--yellow); }
+        
+        .dash-card { background: var(--bg-card); padding: 25px; border-radius: 16px; border: 1px solid #2c3e50; flex: 1; margin-right: 20px; text-align: center; }
+        .dash-card h1 { font-size: 40px; color: white; margin: 10px 0; }
         
         /* Mobile */
         @media (max-width: 768px) {
@@ -249,8 +285,8 @@ html_content = """
         <!-- 1. DASHBOARD -->
         <div id="home" class="page active">
             <div style="display:flex; flex-wrap:wrap; gap:15px; margin-bottom:30px;">
-                <div class="dash-card" style="background:#151b24; padding:20px; border-radius:16px; border:1px solid #2c3e50; flex:1; text-align:center;"><h3>Stav Konta</h3><h1 id="dash-bankroll" style="color:white; margin:10px 0;">€1,000</h1></div>
-                <div class="dash-card" style="background:#151b24; padding:20px; border-radius:16px; border:1px solid #2c3e50; flex:1; text-align:center;"><h3>Simulácia</h3><p style="color:#888; font-size:12px; margin-bottom:10px;">Vyhodnotiť tikety</p><button class="btn-analyze" style="padding:10px; font-size:12px; width:auto;" onclick="evaluateTickets()">🔄 Spustiť</button></div>
+                <div class="dash-card"><h3>Stav Konta</h3><h1 id="dash-bankroll">€1,000</h1></div>
+                <div class="dash-card"><h3>Simulácia</h3><p style="color:#888; font-size:12px; margin-bottom:10px;">Vyhodnotiť tikety</p><button class="btn-analyze" style="padding:10px; font-size:12px; width:auto;" onclick="evaluateTickets()">🔄 Spustiť</button></div>
             </div>
             <div class="chart-box" style="background:#151b24; padding:15px; border-radius:16px; border:1px solid #2c3e50;">
                 <canvas id="profitChart" height="200"></canvas>
@@ -349,7 +385,7 @@ html_content = """
                     
                     html += `
                     <div class="analysis-card">
-                        <div class="ac-header"><div class="ac-teams">${m.domaci} vs ${m.hostia}</div><div style="color:#66fcf1; font-weight:bold;">${m.kurz}</div></div>
+                        <div class="ac-header"><div class="ac-teams">${m.domaci} vs ${m.hostia}</div><div style="background:#1a2634; color:#66fcf1; padding:5px 10px; border-radius:5px;">${m.kurz}</div></div>
                         <div class="ac-body">
                             <div class="ac-left">
                                 <div style="margin-bottom:10px; color:#888; font-size:12px;">ŠTATISTIKY MODELU</div>
@@ -389,7 +425,7 @@ html_content = """
                 total *= m.kurz; ticketInfo.push(`${m.domaci} (${m.tip})`);
                 rows += `<div class="ticket-row"><div><div style="font-weight:bold; color:white;">${m.domaci} - ${m.hostia}</div><div style="color:#888; font-size:12px;">Tip: ${m.tip}</div></div><div style="color:var(--primary); font-weight:bold;">${m.kurz}</div></div>`;
             });
-            div.innerHTML = `<div class="ticket-wrapper"><div class="ticket-header"><h2 style="margin:0; color:var(--primary);">${title}</h2></div><div class="ticket-body">${rows}</div><div class="ticket-footer"><div style="color:#888;">CELKOVÝ KURZ</div><div style="font-size:24px; font-weight:bold; color:var(--primary);">${total.toFixed(2)}</div></div><button class="btn-ticket" onclick='saveTicket(${total.toFixed(2)}, ${JSON.stringify(ticketInfo)})'>VSAĎIŤ 50€</button></div>`;
+            div.innerHTML = `<div class="ticket-wrapper"><div class="ticket-header"><h2 style="margin:0; color:var(--primary);">${title}</h2></div><div class="ticket-body">${rows}</div><div class="ticket-footer"><div style="color:#888;">CELKOVÝ KURZ</div><div style="font-size:24px; font-weight:bold; color:var(--primary);">${total.toFixed(2)}</div></div><button class="btn-ticket" onclick='saveTicket(${total.toFixed(2)}, ${JSON.stringify(ticketInfo)})'>ULOŽIŤ DO HISTÓRIE (VKLAD €50)</button></div>`;
         }
 
         function saveTicket(odds, matches) {
