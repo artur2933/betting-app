@@ -14,10 +14,10 @@ app = FastAPI()
 # 🔑 API KĽÚČE (VLOŽ OBA!)
 # ==========================================
 # 1. Kľúč na dáta (kurzy): https://the-odds-api.com/
-ODDS_API_KEY = "VLOZ_SVOJ_ODDS_API_KLUC_SEM"    
+ODDS_API_KEY = "3e42c726ab364fb9eeede03b0017964c"    
 
 # 2. Kľúč na texty (AI): https://aistudio.google.com/app/apikey
-GEMINI_API_KEY = "VLOZ_SVOJ_GEMINI_KLUC_SEM"    
+GEMINI_API_KEY = "AIzaSyCreRpXTUwxzJegxQKUJ2RiX5BwSagdljg"    
 # ==========================================
 
 # Nastavenie Gemini
