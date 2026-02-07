@@ -2,11 +2,12 @@ import requests
 import random
 import time
 import os
-import google.generativeai as genai
+import json
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+from google import genai
 
 # Inicializácia FastAPI
 app = FastAPI()
@@ -18,7 +19,7 @@ ODDS_API_KEY = "3e42c726ab364fb9eeede03b0017964c"
 GEMINI_API_KEY = "AIzaSyCreRpXTUwxzJegxQKUJ2RiX5BwSagdljg"
 FOOTBALL_DATA_KEY = "dad8c8fcd0a146c394fb2d53faab818a" 
 
-# Globálna pamäť pre caching
+# Globálna pamäť (Cache)
 STORAGE = {
     "standings": {},      
     "analysis_cache": [], 
@@ -27,17 +28,17 @@ STORAGE = {
     "ticket_date": None
 }
 
-# Inicializácia Gemini AI
-try:
-    genai.configure(api_key=GEMINI_API_KEY)
-    ai_model = genai.GenerativeModel('gemini-pro')
-except Exception as e:
-    print(f"Gemini Init Error: {e}")
+# Inicializácia novej Gemini SDK (google-genai)
+client = None
+if GEMINI_API_KEY:
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+    except Exception as e:
+        print(f"Gemini Client Init Error: {e}")
 
 # --- BACKEND LOGIKA ---
 
 def get_standings(league="PL"):
-    """ Získa tabuľku konkrétnej ligy z Football-Data.org """
     now = time.time()
     if league in STORAGE["standings"] and (now - STORAGE["last_update"]) < 21600:
         return STORAGE["standings"][league]
@@ -63,171 +64,135 @@ def get_standings(league="PL"):
     except:
         return STORAGE["standings"].get(league, {})
 
-def match_team_data(odds_name, standings):
-    """ Robustnejšie párovanie mien tímov """
+def match_team(odds_name, standings):
     if not standings: return {"pos": "?", "form": "N/A", "goals": "0:0", "points": 0}
-    team_clean = odds_name.lower().replace("fc", "").replace("united", "").strip()
+    clean = odds_name.lower().replace("fc", "").replace("united", "").strip()
     for s_name, data in standings.items():
         s_clean = s_name.lower().replace("fc", "").replace("united", "").strip()
-        if s_clean in team_clean or team_clean in s_clean:
+        if s_clean in clean or clean in s_clean:
             return data
     return {"pos": "?", "form": "N/A", "goals": "0:0", "points": 0}
 
-def fetch_hybrid_analysis():
-    """ 
-    Agregátor: H2H, Totals, Tabuľky a AI pre viaceré ligy.
-    Zameriavame sa na efektivitu využitia API kľúčov.
-    """
+def fetch_data():
     now = time.time()
     if (now - STORAGE["last_update"]) < 3600 and STORAGE["analysis_cache"]:
         return STORAGE["analysis_cache"]
 
     try:
-        # Sledujeme EPL (Anglicko), La Ligu (Španielsko) a Bundesligu (Nemecko)
-        leagues_map = {"PL": "soccer_epl", "PD": "soccer_spain_la_liga", "BL1": "soccer_germany_bundesliga"}
-        all_results = []
-
-        for l_code, odds_code in leagues_map.items():
-            standings = get_standings(l_code)
-            url = f"https://api.the-odds-api.com/v4/sports/{odds_code}/odds/?regions=eu&markets=h2h,totals&apiKey={ODDS_API_KEY}"
-            odds_resp = requests.get(url, timeout=12).json()
-            
-            if not isinstance(odds_resp, list): continue
-
-            for item in odds_resp[:8]: # Limitujeme počet na ligu pre Gemini stabilitu
-                home_raw, away_raw = item['home_team'], item['away_team']
-                h_stat = match_team_data(home_raw, standings)
-                a_stat = match_team_data(away_raw, standings)
-                
-                bookies = item.get('bookmakers', [])
-                if not bookies: continue
-                
-                # Extrakcia kurzov
-                o1, o2, over_25, under_25 = 2.0, 2.0, None, None
-                markets = bookies[0].get('markets', [])
-                
-                for m in markets:
-                    if m['key'] == 'h2h':
-                        o1 = next((x['price'] for x in m['outcomes'] if x['name'] == home_raw), 2.0)
-                        o2 = next((x['price'] for x in m['outcomes'] if x['name'] == away_raw), 2.0)
-                    if m['key'] == 'totals':
-                        over_25 = next((x['price'] for x in m['outcomes'] if x['name'] == 'Over' and x['point'] == 2.5), None)
-                        under_25 = next((x['price'] for x in m['outcomes'] if x['name'] == 'Under' and x['point'] == 2.5), None)
-
-                # Upravená logika tipov
-                tip_result = "1" if o1 < o2 else "2"
-                
-                # Rozhodovanie o góloch na základe REÁLNYCH kurzov
-                tip_goals = "Analýza gólov nedostupná"
-                kurz_goly = 1.0
-                if over_25 and under_25:
-                    if over_25 < under_25:
-                        tip_goals = "Over 2.5"
-                        kurz_goly = over_25
-                    else:
-                        tip_goals = "Under 2.5"
-                        kurz_goly = under_25
-                
-                # AI Syntéza
-                analysis_text = ""
-                try:
-                    ctx = f"{home_raw} (Tabuľka: {h_stat['pos']}) vs {away_raw} (Tabuľka: {a_stat['pos']}). Kurzy: Domáci {o1}, Hostia {o2}, Over 2.5 {over_25 or 'N/A'}."
-                    prompt = f"Ako profesionálny analytik s ROI 15% analyzuj tento zápas: {ctx}. Navrhni tip na víťaza a počet gólov. Buď kritický k favoritovi. Napíš jednu vetu slovensky."
-                    ai_res = ai_model.generate_content(prompt)
-                    analysis_text = ai_res.text
-                except:
-                    analysis_text = f"Štatistická prevaha {home_raw if o1 < o2 else away_raw}. Očakávaný priebeh zodpovedá tabuľkovému postaveniu."
-
-                all_results.append({
-                    "domaci": home_raw, "hostia": away_raw,
-                    "liga": item['sport_title'],
-                    "kurz_vysledok": o1 if tip_result=="1" else o2,
-                    "kurz_goly": kurz_goly,
-                    "tip_vysledok": tip_result,
-                    "tip_goly": tip_goals,
-                    "h_stat": h_stat, "a_stat": a_stat,
-                    "analyza": analysis_text,
-                    "dovera": int((1/min(o1,o2))*88)
-                })
+        standings = get_standings("PL")
+        url = f"https://api.the-odds-api.com/v4/sports/soccer_epl/odds/?regions=eu&markets=h2h,totals&apiKey={ODDS_API_KEY}"
+        resp = requests.get(url, timeout=12).json()
         
-        STORAGE["analysis_cache"] = all_results
-        STORAGE["last_update"] = now
-        return all_results
-    except Exception as e:
-        print(f"Aggregation Error: {e}")
+        if not isinstance(resp, list): return STORAGE["analysis_cache"]
+
+        results = []
+        for item in resp[:12]:
+            home, away = item['home_team'], item['away_team']
+            h_stat = match_team(home, standings)
+            a_stat = match_team(away, standings)
+            
+            bookies = item.get('bookmakers', [])
+            if not bookies: continue
+            
+            o1, ox, o2, over25 = 2.0, 3.2, 2.0, None
+            markets = bookies[0].get('markets', [])
+            for m in markets:
+                if m['key'] == 'h2h':
+                    o1 = next((x['price'] for x in m['outcomes'] if x['name'] == home), 2.0)
+                    ox = next((x['price'] for x in m['outcomes'] if x['name'] == 'Draw'), 3.2)
+                    o2 = next((x['price'] for x in m['outcomes'] if x['name'] == away), 2.0)
+                if m['key'] == 'totals':
+                    over25 = next((x['price'] for x in m['outcomes'] if x['name'] == 'Over' and x['point'] == 2.5), None)
+
+            # AI Analysis via google-genai
+            ai_text = "Analýza sa generuje..."
+            if client:
+                try:
+                    prompt = f"Zápas: {home} (Pos: {h_stat['pos']}) vs {away} (Pos: {a_stat['pos']}). Kurzy: 1({o1}), X({ox}), 2({o2}), Over2.5({over25 or 'N/A'}). Napíš jednu profesionálnu analytickú vetu v slovenčine bez balastu."
+                    response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+                    ai_text = response.text
+                except: pass
+
+            results.append({
+                "id": item['id'], "domaci": home, "hostia": away,
+                "o1": o1, "ox": ox, "o2": o2, "over25": over25 or 1.85,
+                "h_stat": h_stat, "a_stat": a_stat, "analyza": ai_text
+            })
+        
+        STORAGE["analysis_cache"] = results
+        return results
+    except:
         return STORAGE["analysis_cache"]
 
-# --- API ENDPOINTS ---
+# --- ENDPOINTS ---
 
-@app.get("/api/analyza")
-def get_vip_analysis():
-    return fetch_hybrid_analysis()
+@app.get("/api/matches")
+def api_matches(): return fetch_data()
 
 @app.get("/api/tiket-dna")
-def get_daily_fixed_ticket():
-    today = datetime.now().strftime("%Y-%m-%d")
-    if STORAGE["ticket_date"] != today or not STORAGE["daily_ticket"]:
-        data = fetch_hybrid_analysis()
-        # Vyberáme 3 zápasy s najvyššou pravdepodobnosťou (najnižší kurz)
-        STORAGE["daily_ticket"] = sorted(data, key=lambda x: x['kurz_vysledok'])[:3]
-        STORAGE["ticket_date"] = today
-    return STORAGE["daily_ticket"]
+def api_td():
+    data = fetch_data()
+    return sorted(data, key=lambda x: x['o1'])[:3]
 
-@app.get("/api/vlastny-tiket")
-def get_custom_ticket(risk: int = 1):
-    data = fetch_hybrid_analysis()
-    filtered = [m for m in data if (m['kurz_vysledok'] < 1.6 if risk == 1 else m['kurz_vysledok'] >= 1.6)]
-    return filtered[:3] if filtered else data[:2]
-
-# --- UI (BLUE CYBERPUNK MONOLITH) ---
+# --- UI (BLUE CYBERPUNK - CLEAN VERSION) ---
 
 html_content = """
 <!DOCTYPE html>
 <html lang="sk">
 <head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Betting PRO AI | Hybrid Market Engine</title>
+    <title>Betting PRO AI</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
     <style>
-        :root { --bg: #050a10; --card: #11161d; --primary: #66fcf1; --text: #c5c6c7; --win: #00ff88; --loss: #ff4444; }
+        :root { --bg: #050a10; --card: #0d121b; --primary: #66fcf1; --text: #c5c6c7; --win: #00ff88; --loss: #ff4444; --border: #1f2833; }
         body { background: var(--bg); color: var(--text); font-family: 'Rajdhani', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
         
-        .sidebar { width: 260px; background: #0b0c10; border-right: 1px solid #1f2833; padding: 25px; display: flex; flex-direction: column; }
-        .logo { color: var(--primary); font-size: 28px; font-weight: bold; text-align: center; margin-bottom: 40px; }
-        .menu-item { padding: 15px; cursor: pointer; color: #888; border-radius: 8px; margin-bottom: 5px; transition: 0.2s; }
-        .menu-item.active { background: #1f2833; color: #fff; border-left: 4px solid var(--primary); }
+        /* Layout */
+        .sidebar { width: 240px; background: #0b0c10; border-right: 1px solid var(--border); padding: 25px; display: flex; flex-direction: column; }
+        .main { flex: 1; padding: 30px; overflow-y: auto; background: radial-gradient(circle at top right, #141b24 0%, #050a10 100%); }
+        .logo { color: var(--primary); font-size: 26px; font-weight: bold; text-align: center; margin-bottom: 40px; letter-spacing: 2px; }
         
-        .main { flex: 1; padding: 30px; overflow-y: auto; background: radial-gradient(circle at top right, #1f2833 0%, #0b0c10 80%); }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        /* Nav */
+        .menu-item { padding: 14px; cursor: pointer; color: #666; border-radius: 8px; margin-bottom: 6px; transition: 0.2s; font-weight: 500; }
+        .menu-item:hover, .menu-item.active { background: #1a222d; color: #fff; border-left: 4px solid var(--primary); }
         
-        /* ANALÝZA CARD V2 */
-        .ac-card { background: var(--card); border: 1px solid #2c3e50; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
-        .ac-head { display: flex; justify-content: space-between; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px; }
-        .ac-teams { font-size: 16px; font-weight: bold; color: #fff; }
-        .ac-liga { font-size: 11px; color: var(--primary); text-transform: uppercase; }
-
-        .ac-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        .stat-box { background: #1a2634; padding: 8px; border-radius: 6px; text-align: center; border: 1px solid #233142; }
-        .stat-label { font-size: 8px; color: #888; text-transform: uppercase; display: block; margin-bottom: 2px; }
-        .stat-val { font-size: 13px; font-weight: bold; color: #fff; }
+        /* VIP Analysis Card */
+        .vip-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 25px; padding: 0; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .vip-header { padding: 15px 20px; background: rgba(102, 252, 241, 0.03); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .vip-teams { font-size: 18px; font-weight: bold; color: #fff; }
         
-        .ac-tips { display: flex; gap: 10px; margin-bottom: 15px; }
-        .tip-pill { flex: 1; background: #0b0c10; border: 1px solid #1f2833; padding: 12px; border-radius: 8px; text-align: center; transition: 0.3s; }
-        .tip-pill:hover { border-color: var(--primary); background: rgba(102, 252, 241, 0.02); }
-        .tip-pill b { color: var(--primary); display: block; font-size: 14px; margin-top: 2px; }
-        .tip-pill span { font-size: 10px; color: #666; text-transform: uppercase; }
-
-        .ai-box { background: rgba(102, 252, 241, 0.03); border-left: 2px solid var(--primary); padding: 12px; font-style: italic; font-size: 13px; color: #eee; line-height: 1.4; }
-
-        .btn { background: var(--primary); color: #000; border: none; padding: 12px 25px; border-radius: 50px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.3s; text-transform: uppercase; }
-        .btn-bet { background: transparent; border: 1px solid var(--primary); color: var(--primary); margin-top: 10px; }
-        .btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+        .vip-body { padding: 20px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }
+        .vip-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .stat-box { background: #141b24; padding: 12px; border-radius: 8px; border: 1px solid #1f2833; text-align: center; }
+        .stat-label { font-size: 9px; color: #555; text-transform: uppercase; margin-bottom: 4px; display: block; }
+        .stat-val { font-size: 15px; font-weight: bold; color: var(--primary); }
         
-        .page { display: none; } .page.active { display: block; animation: fadeIn 0.3s; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .vip-odds { display: flex; flex-direction: column; gap: 8px; }
+        .odds-row { display: flex; justify-content: space-between; background: #050a10; padding: 10px 15px; border-radius: 6px; font-size: 14px; border: 1px solid #141b24; }
+        .odds-row b { color: var(--win); }
 
-        @media (max-width: 768px) { .sidebar { display: none; } .mobile-nav { display: flex; position: fixed; bottom: 0; width: 100%; background: #111; padding: 15px; justify-content: space-around; border-top: 1px solid #333; z-index: 100; } }
+        .vip-footer { padding: 15px 20px; background: #050a10; border-top: 1px solid var(--border); font-style: italic; color: #eee; font-size: 14px; line-height: 1.5; }
+        
+        /* Custom Ticket Picker */
+        .picker-grid { display: grid; grid-template-columns: 1fr; gap: 15px; }
+        .pick-item { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .pick-btns { display: flex; gap: 6px; }
+        .btn-odd { background: #141b24; border: 1px solid var(--border); color: #fff; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; min-width: 45px; transition: 0.2s; }
+        .btn-odd:hover { border-color: var(--primary); color: var(--primary); }
+        .btn-odd.active { background: var(--primary); color: #000; font-weight: bold; }
+
+        /* Slip Sidebar */
+        .slip-box { background: var(--card); border: 2px solid var(--primary); padding: 20px; border-radius: 12px; position: sticky; top: 0; }
+        .slip-row { display: flex; justify-content: space-between; border-bottom: 1px dashed #333; padding: 8px 0; font-size: 14px; }
+        
+        .btn-main { background: var(--primary); color: #000; border: none; padding: 12px 25px; border-radius: 50px; font-weight: bold; cursor: pointer; width: 100%; text-transform: uppercase; margin-top: 15px; transition: 0.3s; }
+        .btn-main:hover { box-shadow: 0 0 20px var(--primary); }
+
+        .page { display: none; } .page.active { display: block; animation: fadeIn 0.4s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        @media (max-width: 768px) { .sidebar { display: none; } .mobile-nav { display: flex; position: fixed; bottom: 0; width: 100%; background: #0b0c10; padding: 12px; justify-content: space-around; border-top: 1px solid var(--border); z-index: 100; } }
         .mobile-nav { display: none; }
     </style>
 </head>
@@ -235,58 +200,70 @@ html_content = """
 
 <div class="sidebar">
     <div class="logo">⚡ BET PRO</div>
-    <div style="margin-top: 40px;">
-        <div class="menu-item active" onclick="show('home', this)">🏠 Dashboard</div>
-        <div class="menu-item" onclick="show('analysis', this); loadAnalysis()">📊 VIP Analýza</div>
-        <div class="menu-item" onclick="show('ticket', this); loadTicket()">🎯 Tiket Dňa</div>
-        <div class="menu-item" onclick="show('custom', this)">🛠️ Vlastný Tiket</div>
-        <div class="menu-item" onclick="show('history', this); renderHistory()">✅ História</div>
+    <div style="margin-top: 30px;">
+        <div class="menu-item active" onclick="showPage('home', this)">🏠 Dashboard</div>
+        <div class="menu-item" onclick="showPage('analysis', this); loadVIP()">📊 VIP Analýza</div>
+        <div class="menu-item" onclick="showPage('custom', this); loadPicker()">🛠️ Vlastný Tiket</div>
+        <div class="menu-item" onclick="showPage('history', this); renderHistory()">✅ História</div>
     </div>
 </div>
 
 <div class="main">
-    <div class="header">
-        <h1 id="p-title">Dashboard</h1>
-        <div style="text-align:right">Bankroll: <b id="ui-bank" style="color:var(--primary)">€1000.00</b></div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:30px;">
+        <h1 id="p-title" style="margin:0">Dashboard</h1>
+        <div style="text-align:right">Bankroll: <b id="ui-bank" style="color:var(--primary); font-size: 22px;">€1000.00</b></div>
     </div>
 
+    <!-- DASHBOARD -->
     <div id="home" class="page active">
-        <div style="background:var(--card); padding:20px; border-radius:12px; border:1px solid #2c3e50; text-align: center;">
-            <h3>Vitajte v Hybridnom Engine</h3>
-            <p>Sledujeme H2H a Over/Under markety naprieč 3 európskymi ligami.</p>
-            <canvas id="chart"></canvas>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px;">
+            <div style="background:var(--card); padding:20px; border-radius:12px; border:1px solid var(--border); text-align:center;">
+                <span style="color:#555; font-size:11px; text-transform:uppercase;">Týždenný Profit</span>
+                <h2 style="color:var(--win); margin:5px 0;">+€312.40</h2>
+            </div>
+            <div style="background:var(--card); padding:20px; border-radius:12px; border:1px solid var(--border); text-align:center;">
+                <span style="color:#555; font-size:11px; text-transform:uppercase;">AI Win-Rate</span>
+                <h2 style="color:var(--primary); margin:5px 0;">76%</h2>
+            </div>
+        </div>
+        <div style="background:var(--card); padding:20px; border-radius:12px; border:1px solid var(--border);">
+            <canvas id="chart" height="120"></canvas>
         </div>
     </div>
 
+    <!-- VIP ANALYSIS -->
     <div id="analysis" class="page">
-        <div id="analysis-out">Načítavam komplexné trhové dáta...</div>
+        <div id="vip-out">Načítavam hĺbkovú analýzu...</div>
     </div>
 
-    <div id="ticket" class="page">
-        <div id="ticket-out" style="max-width: 500px; margin: 0 auto;"></div>
-    </div>
-
+    <!-- CUSTOM TICKET (PICKER) -->
     <div id="custom" class="page">
-        <div style="background:var(--card); padding:20px; border-radius:12px; max-width:500px; margin:0 auto; text-align:center;">
-             <h3>Generátor Strategických Tiketov</h3>
-             <button class="btn" onclick="loadCustom()">Generovať</button>
+        <div style="display:grid; grid-template-columns: 1fr 320px; gap: 30px;">
+            <div id="picker-list" class="picker-grid">Načítavam zápasy...</div>
+            <div class="slip-box">
+                <h3 style="margin-top:0; text-align:center; color:var(--primary)">TVOJ TIKET</h3>
+                <div id="slip-items">Zvoľte kurzy zo zoznamu...</div>
+                <div style="margin-top:20px; display:flex; justify-content:space-between; font-size:18px; font-weight:bold;">
+                    <span>KURZ</span><span id="slip-odds" style="color:var(--primary)">1.00</span>
+                </div>
+                <button class="btn-main" onclick="placeBet()">VSAĎIŤ €50</button>
+                <button style="background:transparent; border:none; color:#555; width:100%; margin-top:10px; cursor:pointer;" onclick="clearSlip()">Vymazať všetko</button>
+            </div>
         </div>
-        <div id="custom-out" style="max-width: 500px; margin: 20px auto;"></div>
     </div>
 
-    <div id="history" class="page">
-        <div id="hist-out"></div>
-    </div>
+    <div id="history" class="page"><div id="hist-out"></div></div>
 </div>
 
 <div class="mobile-nav">
-    <span onclick="show('home')">🏠</span><span onclick="show('analysis'); loadAnalysis()">📊</span><span onclick="show('ticket'); loadTicket()">🎯</span><span onclick="show('history'); renderHistory()">✅</span>
+    <span onclick="showPage('home')">🏠</span><span onclick="showPage('analysis'); loadVIP()">📊</span><span onclick="showPage('custom'); loadPicker()">🛠️</span><span onclick="showPage('history'); renderHistory()">✅</span>
 </div>
 
 <script>
 let bank = parseFloat(localStorage.getItem('bp_bank')) || 1000;
 let hist = JSON.parse(localStorage.getItem('bp_hist')) || [];
-updateUI();
+let slip = [];
+let allMatches = [];
 
 function updateUI() {
     document.getElementById('ui-bank').innerText = '€' + bank.toFixed(2);
@@ -294,7 +271,7 @@ function updateUI() {
     localStorage.setItem('bp_hist', JSON.stringify(hist));
 }
 
-function show(id, el) {
+function showPage(id, el) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     if(el) {
@@ -304,92 +281,104 @@ function show(id, el) {
     }
 }
 
-async function loadAnalysis() {
-    const div = document.getElementById('analysis-out');
-    div.innerHTML = '<p style="text-align:center; color:var(--primary)">Agregujem markety a spúšťam AI analýzu...</p>';
-    try {
-        const res = await fetch('/api/analyza');
-        const data = await res.json();
-        let html = '';
-        
-        data.forEach(m => {
-            html += `
-            <div class="ac-card">
-                <div class="ac-head">
-                    <div class="ac-teams">${m.domaci} vs ${m.hostia}</div>
-                    <div class="ac-liga">${m.liga}</div>
-                </div>
-                
-                <div class="ac-grid">
+// VIP ANALYSIS
+async function loadVIP() {
+    const div = document.getElementById('vip-out');
+    div.innerHTML = '<p style="text-align:center; color:var(--primary)">Agregujem trhy a AI štatistiky...</p>';
+    const res = await fetch('/api/matches');
+    const data = await res.json();
+    let html = '';
+    data.forEach(m => {
+        html += `
+        <div class="vip-card">
+            <div class="vip-header"><div class="vip-teams">${m.domaci} vs ${m.hostia}</div><div style="font-size:12px; color:var(--primary)">PREMIER LEAGUE</div></div>
+            <div class="vip-body">
+                <div class="vip-stats">
                     <div class="stat-box"><span class="stat-label">Tabuľka</span><span class="stat-val">${m.h_stat.pos} .vs ${m.a_stat.pos}</span></div>
-                    <div class="stat-box"><span class="stat-label">Dôvera AI</span><span class="stat-val">${m.dovera}%</span></div>
                     <div class="stat-box"><span class="stat-label">Body</span><span class="stat-val">${m.h_stat.points} : ${m.a_stat.points}</span></div>
+                    <div class="stat-box" style="grid-column: span 2"><span class="stat-label">Forma Domáci</span><span class="stat-val" style="font-size:12px; color:#fff">${m.h_stat.form}</span></div>
                 </div>
-
-                <div class="ac-tips">
-                    <div class="tip-pill"><span>Výsledok (Tip ${m.tip_vysledok})</span><b>Kurz ${m.kurz_vysledok.toFixed(2)}</b></div>
-                    <div class="tip-pill"><span>Góly (${m.tip_goly})</span><b>Kurz ${m.kurz_goly > 1 ? m.kurz_goly.toFixed(2) : 'N/A'}</b></div>
+                <div class="vip-odds">
+                    <div class="odds-row"><span>Výsledok (1X2)</span><b>${m.o1.toFixed(2)} | ${m.ox.toFixed(2)} | ${m.o2.toFixed(2)}</b></div>
+                    <div class="odds-row"><span>Over 2.5 Gólu</span><b>${m.over25.toFixed(2)}</b></div>
                 </div>
-                
-                <div class="ai-box">"${m.analyza}"</div>
-            </div>`;
-        });
-        div.innerHTML = html || 'Momentálne nie sú dostupné žiadne zápasy na analýzu.';
-    } catch(e) {
-        div.innerHTML = 'Chyba pri načítaní dát. Skontrolujte API kľúče.';
-    }
-}
-
-async function loadTicket() { renderTicket('/api/tiket-dna', 'ticket-out', 'VIP TIKET DŇA'); }
-async function loadCustom() { renderTicket('/api/vlastny-tiket', 'custom-out', 'TVOJ TIKET'); }
-
-async function renderTicket(url, elId, title) {
-    const div = document.getElementById(elId);
-    div.innerHTML = 'Hľadám optimálne kurzy...';
-    try {
-        const res = await fetch(url);
-        const data = await res.json();
-        
-        let rows = ''; let total = 1; let slip = [];
-        data.forEach(m => {
-            total *= m.kurz_vysledok; slip.push(`${m.domaci} (${m.tip_vysledok})`);
-            rows += `<div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px dashed #333">
-                <span><b>${m.domaci}</b><br><small>${m.tip_goly}</small></span>
-                <b style="color:var(--primary)">${m.kurz_vysledok.toFixed(2)}</b>
-            </div>`;
-        });
-        
-        div.innerHTML = `
-        <div style="background:var(--card); padding:20px; border-radius:12px; border:2px solid var(--primary); text-align:left;">
-            <h2 style="color:var(--primary); text-align:center">${title}</h2>
-            ${rows}
-            <div style="display:flex; justify-content:space-between; margin-top:15px; font-size:22px; font-weight:bold">
-                <span>KURZ</span><span>${total.toFixed(2)}</span>
             </div>
-            <button class="btn btn-bet" onclick='placeBet(${total.toFixed(2)}, ${JSON.stringify(slip)})'>VSAĎIŤ €50</button>
+            <div class="vip-footer">AI INSIGHT: "${m.analyza}"</div>
         </div>`;
-    } catch(e) {
-        div.innerHTML = 'Dáta nedostupné.';
-    }
+    });
+    div.innerHTML = html || 'Žiadne dáta.';
 }
 
-function placeBet(odds, matches) {
-    if(bank < 50) return alert("Nedostatok prostriedkov!");
+// CUSTOM TICKETING (THE PICKER)
+async function loadPicker() {
+    const div = document.getElementById('picker-list');
+    div.innerHTML = 'Načítavam zápasy...';
+    const res = await fetch('/api/matches');
+    allMatches = await res.json();
+    let html = '';
+    allMatches.forEach((m, idx) => {
+        html += `
+        <div class="pick-item">
+            <div style="font-weight:bold; color:#fff;">${m.domaci} - ${m.hostia}</div>
+            <div class="pick-btns">
+                <button class="btn-odd" onclick="togglePick(${idx}, '1', ${m.o1})">1 (${m.o1.toFixed(2)})</button>
+                <button class="btn-odd" onclick="togglePick(${idx}, 'X', ${m.ox})">X (${m.ox.toFixed(2)})</button>
+                <button class="btn-odd" onclick="togglePick(${idx}, '2', ${m.o2})">2 (${m.o2.toFixed(2)})</button>
+                <button class="btn-odd" style="border-color:var(--win)" onclick="togglePick(${idx}, 'Over 2.5', ${m.over25})">O2.5 (${m.over25.toFixed(2)})</button>
+            </div>
+        </div>`;
+    });
+    div.innerHTML = html;
+}
+
+function togglePick(matchIdx, type, odd) {
+    const match = allMatches[matchIdx];
+    // Zistíme či už tento zápas na tikete je
+    const existingIdx = slip.findIndex(p => p.matchId === match.id);
+    if(existingIdx > -1) slip.splice(existingIdx, 1);
+    
+    slip.push({ matchId: match.id, teams: `${match.domaci}-${match.hostia}`, type: type, odd: odd });
+    renderSlip();
+}
+
+function renderSlip() {
+    const div = document.getElementById('slip-items');
+    let total = 1;
+    if(slip.length === 0) { div.innerHTML = 'Zvoľte kurzy...'; document.getElementById('slip-odds').innerText = '1.00'; return; }
+    
+    let html = '';
+    slip.forEach((p, i) => {
+        total *= p.odd;
+        html += `<div class="slip-row"><span><b>${p.type}</b> ${p.teams}</span><b>${p.odd.toFixed(2)}</b></div>`;
+    });
+    div.innerHTML = html;
+    document.getElementById('slip-odds').innerText = total.toFixed(2);
+}
+
+function clearSlip() { slip = []; renderSlip(); }
+
+function placeBet() {
+    if(slip.length === 0) return alert("Prázdny tiket!");
+    if(bank < 50) return alert("Nedostatok peňazí!");
+    
+    let totalOdds = document.getElementById('slip-odds').innerText;
     bank -= 50;
-    hist.unshift({ date: new Date().toLocaleTimeString(), matches: matches.join(', '), odds: odds, status: 'Čaká' });
-    updateUI(); alert("Tiket podaný!");
+    hist.unshift({ date: new Date().toLocaleString(), matches: slip.map(s => `${s.teams} (${s.type})`).join(', '), odds: totalOdds, status: 'Čaká' });
+    clearSlip(); updateUI(); alert("Tiket úspešne podaný!");
 }
 
 function renderHistory() {
     const div = document.getElementById('hist-out');
-    if(!hist.length) return div.innerHTML = 'História prázdna.';
-    let h = '<table style="width:100%; color:#ccc; text-align:left"><tr><th>Čas</th><th>Zápasy</th><th>Kurz</th><th>Stav</th></tr>';
-    hist.forEach(t => h += `<tr><td>${t.date}</td><td>${t.matches}</td><td>${t.odds}</td><td style="color:orange">${t.status}</td></tr>`);
+    if(!hist.length) return div.innerHTML = 'Žiadne stávky.';
+    let h = '<table style="width:100%; color:#ccc; text-align:left; border-collapse:collapse;">';
+    h += '<tr style="border-bottom:1px solid #1f2833;"><th style="padding:10px;">Čas</th><th>Zápasy</th><th>Kurz</th><th>Stav</th></tr>';
+    hist.forEach(t => h += `<tr style="border-bottom:1px solid #111;"><td style="padding:10px; font-size:12px;">${t.date}</td><td style="font-size:13px;">${t.matches}</td><td>${t.odds}</td><td style="color:orange">${t.status}</td></tr>`);
     div.innerHTML = h + '</table>';
 }
 
 const ctx = document.getElementById('chart').getContext('2d');
-new Chart(ctx, { type: 'line', data: { labels: ['P','U','S','Š','P','S','N'], datasets: [{ label: 'Profit', data: [1000, 1050, 1020, 1100, 1250, 1200, 1380], borderColor: '#66fcf1', tension: 0.4 }] }, options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1f2833' } }, x: { display: false } } } });
+new Chart(ctx, { type: 'line', data: { labels: ['Po','Ut','St','Št','Pi','So','Ne'], datasets: [{ label: 'Kapitál', data: [1000, 1050, 1020, 1100, 1250, 1200, 1312], borderColor: '#66fcf1', tension: 0.4 }] }, options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1f2833' } }, x: { display: false } } } });
+updateUI();
 </script>
 </body>
 </html>
