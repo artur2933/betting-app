@@ -439,3 +439,10 @@ updateUI();
 </script>
 </body>
 </html>
+"""
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return html_content
+
+# Startovací príkaz pre Render: uvicorn main:app --host 0.0.0.0 --port $PORT
