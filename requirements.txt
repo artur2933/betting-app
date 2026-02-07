@@ -2,4 +2,4 @@ fastapi
 uvicorn
 requests
 python-dateutil
-google-generativeai
+google-genai
