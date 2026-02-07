@@ -393,3 +393,8 @@ new Chart(ctx, { type: 'line', data: { labels: ['P','U','S','Š','P','S','N'], d
 </script>
 </body>
 </html>
+"""
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return html_content
