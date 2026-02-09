@@ -13,7 +13,7 @@ from google import genai
 app = FastAPI()
 
 # ==========================================
-# 🔑 MOJE API KĽÚČE (ZACHOVANÉ)
+# 🔑 API KĽÚČE (ZACHOVANÉ)
 # ==========================================
 ODDS_API_KEY = "3e42c726ab364fb9eeede03b0017964c"    
 GEMINI_API_KEY = "AIzaSyCreRpXTUwxzJegxQKUJ2RiX5BwSagdljg"
@@ -34,12 +34,13 @@ STORAGE = {
     "ticket_date": None
 }
 
+# Inicializácia novej Gemini SDK (google-genai)
 client = None
 if GEMINI_API_KEY:
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
-        print(f"Gemini Init Error: {e}")
+        print(f"Gemini Client Init Error: {e}")
 
 # --- BACKEND LOGIKA ---
 
@@ -92,7 +93,7 @@ def fetch_all_leagues_data():
             
             league_results = []
             if isinstance(resp, list):
-                for item in resp[:12]:
+                for item in resp[:15]:
                     home, away = item['home_team'], item['away_team']
                     h_stat = match_team(home, standings)
                     a_stat = match_team(away, standings)
@@ -110,6 +111,7 @@ def fetch_all_leagues_data():
                         if m['key'] == 'totals':
                             over25 = next((x['price'] for x in m['outcomes'] if x['name'] == 'Over' and x['point'] == 2.5), 1.85)
 
+                    # Pravdepodobnosť 1-X-2
                     total_p = (1/o1) + (1/ox) + (1/o2)
                     prob_1 = round(((1/o1) / total_p) * 100)
                     prob_x = round(((1/ox) / total_p) * 100)
@@ -119,7 +121,7 @@ def fetch_all_leagues_data():
                         "id": item['id'], "domaci": home, "hostia": away,
                         "o1": o1, "ox": ox, "o2": o2, "over25": over25,
                         "probs": {"1": prob_1, "X": prob_x, "2": prob_2},
-                        "h_stat": h_stat, "a_stat": a_stat, "league_name": info['name']
+                        "h_stat": h_stat, "a_stat": a_stat, "league_name": info['name'], "league_code": code
                     })
             all_matches[code] = league_results
         except: continue
@@ -134,23 +136,25 @@ def fetch_all_leagues_data():
 def get_analysis(league: str = "PL"):
     data = fetch_all_leagues_data()
     matches = data.get(league, [])
+    # Generujeme AI analýzu pomocou novej google-genai SDK
     for m in matches:
-        if "analyza" not in m:
-            ai_text = "Analýza sa generuje..."
+        if "analyza" not in m or m["analyza"] == "Analýza sa generuje...":
             if client:
                 try:
-                    prompt = f"Zápas: {m['domaci']} (Pos: {m['h_stat']['pos']}) vs {m['hostia']} (Pos: {m['a_stat']['pos']}). Kurzy: 1({m['o1']}), X({m['ox']}), 2({m['o2']}). Napíš jednu profesionálnu vetu analýzy o šanciach tímu v slovenčine."
+                    prompt = f"Zápas: {m['domaci']} vs {m['hostia']}. Kurzy: 1({m['o1']}), X({m['ox']}), 2({m['o2']}), Over2.5({m['over25']}). Napíš jednu vetu profesionálnej analýzy o šanciach tímu v slovenčine."
                     response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-                    ai_text = response.text
-                except: ai_text = "Dáta sú pripravené na spracovanie."
-            m["analyza"] = ai_text
+                    m["analyza"] = response.text
+                except Exception as e:
+                    m["analyza"] = f"Štatistická analýza pre {m['domaci']} je pripravená na spracovanie."
+            else:
+                m["analyza"] = "AI Modul nie je pripojený."
     return matches
 
 @app.get("/api/tiket-dna")
 def get_daily_ticket():
     data = fetch_all_leagues_data()
-    flat = [item for sub in data.values() for item in sub]
-    return sorted(flat, key=lambda x: min(x['o1'], x['o2']))[:3]
+    all_m = [item for sub in data.values() for item in sub]
+    return sorted(all_m, key=lambda x: min(x['o1'], x['o2']))[:3]
 
 @app.get("/api/generate-ticket")
 def generate_ticket(league: str = "PL", risk: str = "low"):
@@ -161,7 +165,7 @@ def generate_ticket(league: str = "PL", risk: str = "low"):
     else: filtered = [m for m in matches if min(m['o1'], m['o2']) > 2.2]
     return random.sample(filtered, min(len(filtered), 3)) if filtered else matches[:2]
 
-# --- UI (BLUE CYBERPUNK - MOBILE FIRST) ---
+# --- UI (BLUE CYBERPUNK - MOBILE PRO) ---
 
 html_content = """
 <!DOCTYPE html>
@@ -176,8 +180,11 @@ html_content = """
         body { background: var(--bg); color: var(--text); font-family: 'Rajdhani', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
         
         .sidebar { width: 240px; background: #0b0c10; border-right: 1px solid var(--border); padding: 25px; display: flex; flex-direction: column; }
-        .main { flex: 1; padding: 20px; overflow-y: auto; padding-bottom: 80px; background: radial-gradient(circle at top right, #141b24 0%, #050a10 100%); }
+        .main { flex: 1; padding: 20px; overflow-y: auto; padding-bottom: 90px; background: radial-gradient(circle at top right, #141b24 0%, #050a10 100%); }
         .logo { color: var(--primary); font-size: 26px; font-weight: bold; text-align: center; margin-bottom: 40px; }
+        
+        .menu-item { padding: 14px; cursor: pointer; color: #666; border-radius: 8px; margin-bottom: 6px; transition: 0.2s; display: flex; align-items: center; gap: 10px; }
+        .menu-item.active { background: #1a222d; color: #fff; border-left: 4px solid var(--primary); }
         
         .mobile-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: #0b0c10; border-top: 1px solid var(--border); justify-content: space-around; padding: 12px 0; z-index: 1000; }
         .nav-icon { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: #555; cursor: pointer; }
@@ -187,43 +194,36 @@ html_content = """
         .tab { white-space: nowrap; background: #141b24; border: 1px solid var(--border); color: #888; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
         .tab.active { background: var(--primary); color: #000; font-weight: bold; }
 
-        /* VIP CARD - INTERACTIVE */
-        .match-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 12px; cursor: pointer; transition: 0.2s; position: relative; }
-        .match-card:hover { border-color: var(--primary); }
+        .match-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 12px; cursor: pointer; transition: 0.2s; }
         .match-card.open { border-color: var(--primary); background: #101620; }
-        
         .summary { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
         .summary b { color: #fff; }
-        .summary .odds-prev { color: var(--primary); font-family: monospace; font-size: 12px; }
+        .summary .odds-tag { color: var(--primary); font-size: 12px; font-family: monospace; }
 
         .details { display: none; margin-top: 15px; border-top: 1px solid #1f2833; padding-top: 15px; }
         .match-card.open .details { display: block; animation: fadeIn 0.3s; }
 
-        /* Stats Grid */
         .stats-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        .team-col { background: #050a10; padding: 10px; border-radius: 8px; border: 1px solid #141b24; }
-        .team-name { font-size: 11px; color: #555; text-transform: uppercase; margin-bottom: 5px; display: block; }
-        .stat-item { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 3px; }
-        .stat-item b { color: var(--primary); }
+        .team-box { background: #050a10; padding: 10px; border-radius: 8px; border: 1px solid #141b24; }
+        .stat-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+        .stat-row b { color: var(--primary); }
 
         .prob-bar { display: flex; height: 6px; border-radius: 10px; overflow: hidden; background: #333; margin: 10px 0; }
         .p1 { background: var(--win); } .px { background: #555; } .p2 { background: var(--loss); }
-        
-        .ai-verdict { background: rgba(102, 252, 241, 0.05); border-left: 2px solid var(--primary); padding: 12px; margin-top: 15px; border-radius: 4px; }
-        .ai-verdict p { margin: 0; font-size: 13px; font-style: italic; color: #eee; }
 
+        .ai-verdict { background: rgba(102, 252, 241, 0.05); border-left: 3px solid var(--primary); padding: 12px; border-radius: 4px; }
+        
         .ticket-box { background: var(--card); border: 1px solid var(--primary); border-radius: 12px; padding: 20px; max-width: 500px; margin: 0 auto; }
         .btn-main { background: var(--primary); color: #000; border: none; padding: 14px; border-radius: 50px; font-weight: bold; width: 100%; text-transform: uppercase; margin-top: 15px; cursor: pointer; }
         
-        select { background: #141b24; color: #fff; border: 1px solid var(--border); padding: 12px; border-radius: 8px; width: 100%; margin-bottom: 10px; font-family: inherit; }
+        select { background: #141b24; color: #fff; border: 1px solid var(--border); padding: 12px; border-radius: 8px; width: 100%; margin-bottom: 15px; font-family: inherit; }
 
         .page { display: none; } .page.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
         @media (max-width: 768px) {
-            .sidebar { display: none; }
-            .mobile-nav { display: flex; }
-            .main { padding: 15px; padding-bottom: 90px; }
+            .sidebar { display: none; } .mobile-nav { display: flex; }
+            .main { padding: 15px; padding-bottom: 100px; }
         }
     </style>
 </head>
@@ -249,7 +249,6 @@ html_content = """
         </div>
     </div>
 
-    <!-- DASHBOARD -->
     <div id="home" class="page active">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
             <div style="background:var(--card); padding:15px; border-radius:10px; border:1px solid var(--border); text-align:center;">
@@ -257,14 +256,13 @@ html_content = """
                 <h3 style="color:var(--win); margin:5px 0;">+€452.10</h3>
             </div>
             <div style="background:var(--card); padding:15px; border-radius:10px; border:1px solid var(--border); text-align:center;">
-                <span style="color:#555; font-size:10px;">SUCCESS</span>
+                <span style="color:#555; font-size:10px;">WIN RATE</span>
                 <h3 style="color:var(--primary); margin:5px 0;">76%</h3>
             </div>
         </div>
         <div style="background:var(--card); padding:15px; border-radius:10px; border:1px solid var(--border);"><canvas id="chart" height="150"></canvas></div>
     </div>
 
-    <!-- VIP -->
     <div id="analysis" class="page">
         <div class="tab-scroll">
             <div class="tab active" onclick="setLeague('PL', this)">Premier League</div>
@@ -275,21 +273,18 @@ html_content = """
         <div id="match-list">Načítavam trhy...</div>
     </div>
 
-    <!-- DAILY -->
     <div id="daily" class="page"><div id="daily-ticket-out"></div></div>
 
-    <!-- CUSTOM -->
     <div id="custom" class="page">
         <div class="ticket-box">
             <h3 style="margin:0 0 15px 0; text-align:center; color:var(--primary)">GENERÁTOR</h3>
-            <select id="gen-league"><option value="PL">Premier League</option><option value="PD">La Liga</option></select>
+            <select id="gen-league"><option value="PL">Premier League</option><option value="PD">La Liga</option><option value="BL1">Bundesliga</option></select>
             <select id="gen-risk"><option value="low">Nízke riziko</option><option value="medium">Stredné riziko</option><option value="high">Vysoké riziko</option></select>
             <button class="btn-main" onclick="generateSmartTicket()">VYGENEROVAŤ TIKET</button>
             <div id="gen-out" style="margin-top:20px"></div>
         </div>
     </div>
 
-    <!-- HISTORY -->
     <div id="history" class="page"><div id="hist-out"></div></div>
 </div>
 
@@ -330,38 +325,23 @@ async function loadAnalysis(league) {
         <div class="match-card" onclick="this.classList.toggle('open')">
             <div class="summary">
                 <b>${m.domaci} - ${m.hostia}</b>
-                <div class="odds-prev">${m.o1.toFixed(2)} | ${m.ox.toFixed(2)} | ${m.o2.toFixed(2)}</div>
+                <div class="odds-tag">${m.o1.toFixed(2)} | ${m.ox.toFixed(2)} | ${m.o2.toFixed(2)}</div>
             </div>
             <div class="details">
                 <div class="stats-vs">
-                    <div class="team-col">
-                        <span class="team-name">${m.domaci}</span>
-                        <div class="stat-item">Pozícia: <b>#${m.h_stat.pos}</b></div>
-                        <div class="stat-item">Body: <b>${m.h_stat.points}</b></div>
-                        <div class="stat-item">Forma: <b>${m.h_stat.form}</b></div>
+                    <div class="team-box"><span style="font-size:9px;color:#555">DOMÁCI</span>
+                        <div class="stat-row">Pozícia: <b>#${m.h_stat.pos}</b></div>
+                        <div class="stat-row">Forma: <b>${m.h_stat.form}</b></div>
                     </div>
-                    <div class="team-col">
-                        <span class="team-name">${m.hostia}</span>
-                        <div class="stat-item">Pozícia: <b>#${m.a_stat.pos}</b></div>
-                        <div class="stat-item">Body: <b>${m.a_stat.points}</b></div>
-                        <div class="stat-item">Forma: <b>${m.a_stat.form}</b></div>
+                    <div class="team-box"><span style="font-size:9px;color:#555">HOSTIA</span>
+                        <div class="stat-row">Pozícia: <b>#${m.a_stat.pos}</b></div>
+                        <div class="stat-row">Forma: <b>${m.a_stat.form}</b></div>
                     </div>
                 </div>
-                
-                <div style="font-size:10px; color:#555; text-transform:uppercase;">Pravdepodobnosť výhry (1 - X - 2)</div>
-                <div class="prob-bar">
-                    <div class="p1" style="width:${m.probs['1']}%"></div>
-                    <div class="px" style="width:${m.probs['X']}%"></div>
-                    <div class="p2" style="width:${m.probs['2']}%"></div>
-                </div>
-                <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:bold; color:var(--primary)">
-                    <span>${m.probs['1']}%</span><span>${m.probs['X']}%</span><span>${m.probs['2']}%</span>
-                </div>
-
-                <div class="ai-verdict">
-                    <span style="font-size:9px; color:var(--primary); font-weight:bold; display:block; margin-bottom:5px;">AI VERDIKT</span>
-                    <p>"${m.analyza}"</p>
-                </div>
+                <div style="font-size:10px; color:#555; text-transform:uppercase">Pravdepodobnosť (1-X-2)</div>
+                <div class="prob-bar"><div class="p1" style="width:${m.probs['1']}%"></div><div class="px" style="width:${m.probs['X']}%"></div><div class="p2" style="width:${m.probs['2']}%"></div></div>
+                <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:bold; color:var(--primary)"><span>${m.probs['1']}%</span><span>${m.probs['X']}%</span><span>${m.probs['2']}%</span></div>
+                <div class="ai-verdict"><p>"${m.analyza}"</p></div>
             </div>
         </div>`;
     });
@@ -405,8 +385,7 @@ function renderSlip(data, container, title) {
 
 function placeBet(odds, matches) {
     if(bank < 50) return alert("Málo peňazí!");
-    bank -= 50;
-    hist.unshift({ date: new Date().toLocaleString(), matches: matches, odds: odds.toFixed(2) });
+    bank -= 50; hist.unshift({ date: new Date().toLocaleString(), matches: matches, odds: odds.toFixed(2) });
     updateUI(); alert("Tiket podaný!");
 }
 
@@ -414,15 +393,20 @@ function renderHistory() {
     const div = document.getElementById('hist-out');
     if(!hist.length) return div.innerHTML = '<p style="text-align:center">Žiadna história.</p>';
     let h = '<table style="width:100%; text-align:left; border-collapse:collapse; font-size:12px;">';
-    h += '<tr style="color:var(--primary); border-bottom:1px solid #1f2833;"><th style="padding:10px">Čas</th><th>Tiket</th><th>Kurz</th></tr>';
+    h += '<tr style="color:var(--primary); border-bottom:1px solid #1f2833;"><th style="padding:10px">Čas</th><th>Zápasy</th><th>Kurz</th></tr>';
     hist.forEach(t => h += `<tr style="border-bottom:1px solid #111"><td style="padding:10px; font-size:10px">${t.date}</td><td>${t.matches}</td><td style="color:var(--primary)">${t.odds}</td></tr>`);
     div.innerHTML = h + '</table>';
 }
 
 const ctx = document.getElementById('chart').getContext('2d');
-new Chart(ctx, { type: 'line', data: { labels: ['P','U','S','Š','P','S','N'], datasets: [{ label: 'Profit', data: [1000, 1080, 1040, 1150, 1290, 1250, 1452], borderColor: '#66fcf1', tension: 0.4 }] }, options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { grid: { display: false } } } } });
+new Chart(ctx, { type: 'line', data: { labels: ['Po','Ut','St','Št','Pi','So','Ne'], datasets: [{ label: 'Profit', data: [1000, 1080, 1040, 1150, 1290, 1250, 1452], borderColor: '#66fcf1', tension: 0.4 }] }, options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { display: false } } } });
 updateUI();
 </script>
 </body>
 </html>
+"""
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return html_content
 
