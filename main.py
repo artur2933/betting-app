@@ -13,7 +13,7 @@ from google import genai
 app = FastAPI()
 
 # ==========================================
-# 🔑 KONFIGURÁCIA API KĽÚČOV
+# 🔑 MOJE API KĽÚČE (ZACHOVANÉ)
 # ==========================================
 ODDS_API_KEY = "3e42c726ab364fb9eeede03b0017964c"    
 GEMINI_API_KEY = "AIzaSyCreRpXTUwxzJegxQKUJ2RiX5BwSagdljg"
@@ -39,7 +39,7 @@ if GEMINI_API_KEY:
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
-        print(f"Gemini Client Init Error: {e}")
+        print(f"Gemini Init Error: {e}")
 
 # --- BACKEND LOGIKA ---
 
@@ -100,7 +100,7 @@ def fetch_all_leagues_data():
                     bookies = item.get('bookmakers', [])
                     if not bookies: continue
                     
-                    o1, ox, o2, over25 = 2.0, 3.2, 2.0, None
+                    o1, ox, o2, over25 = 2.0, 3.2, 2.0, 1.85
                     markets = bookies[0].get('markets', [])
                     for m in markets:
                         if m['key'] == 'h2h':
@@ -108,7 +108,7 @@ def fetch_all_leagues_data():
                             ox = next((x['price'] for x in m['outcomes'] if x['name'] == 'Draw'), 3.2)
                             o2 = next((x['price'] for x in m['outcomes'] if x['name'] == away), 2.0)
                         if m['key'] == 'totals':
-                            over25 = next((x['price'] for x in m['outcomes'] if x['name'] == 'Over' and x['point'] == 2.5), None)
+                            over25 = next((x['price'] for x in m['outcomes'] if x['name'] == 'Over' and x['point'] == 2.5), 1.85)
 
                     total_p = (1/o1) + (1/ox) + (1/o2)
                     prob_1 = round(((1/o1) / total_p) * 100)
@@ -117,7 +117,7 @@ def fetch_all_leagues_data():
 
                     league_results.append({
                         "id": item['id'], "domaci": home, "hostia": away,
-                        "o1": o1, "ox": ox, "o2": o2, "over25": over25 or 1.85,
+                        "o1": o1, "ox": ox, "o2": o2, "over25": over25,
                         "probs": {"1": prob_1, "X": prob_x, "2": prob_2},
                         "h_stat": h_stat, "a_stat": a_stat, "league_name": info['name']
                     })
@@ -136,19 +136,18 @@ def get_analysis(league: str = "PL"):
     matches = data.get(league, [])
     for m in matches:
         if "analyza" not in m:
-            ai_text = "Dáta sú pripravené na spracovanie."
+            ai_text = "Analýza sa generuje..."
             if client:
                 try:
-                    prompt = f"Zápas: {m['domaci']} vs {m['hostia']}. Kurzy: 1({m['o1']}), X({m['ox']}), 2({m['o2']}). Napíš jednu vetu analýzy o šanciach tímu v slovenčine."
+                    prompt = f"Zápas: {m['domaci']} (Pos: {m['h_stat']['pos']}) vs {m['hostia']} (Pos: {m['a_stat']['pos']}). Kurzy: 1({m['o1']}), X({m['ox']}), 2({m['o2']}). Napíš jednu profesionálnu vetu analýzy o šanciach tímu v slovenčine."
                     response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
                     ai_text = response.text
-                except: pass
+                except: ai_text = "Dáta sú pripravené na spracovanie."
             m["analyza"] = ai_text
     return matches
 
 @app.get("/api/tiket-dna")
 def get_daily_ticket():
-    today = datetime.now().strftime("%Y-%m-%d")
     data = fetch_all_leagues_data()
     flat = [item for sub in data.values() for item in sub]
     return sorted(flat, key=lambda x: min(x['o1'], x['o2']))[:3]
@@ -162,7 +161,7 @@ def generate_ticket(league: str = "PL", risk: str = "low"):
     else: filtered = [m for m in matches if min(m['o1'], m['o2']) > 2.2]
     return random.sample(filtered, min(len(filtered), 3)) if filtered else matches[:2]
 
-# --- UI (BLUE CYBERPUNK - MOBILE OPTIMIZED) ---
+# --- UI (BLUE CYBERPUNK - MOBILE FIRST) ---
 
 html_content = """
 <!DOCTYPE html>
@@ -176,49 +175,55 @@ html_content = """
         :root { --bg: #050a10; --card: #0d121b; --primary: #66fcf1; --text: #c5c6c7; --win: #00ff88; --loss: #ff4444; --border: #1f2833; }
         body { background: var(--bg); color: var(--text); font-family: 'Rajdhani', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
         
-        /* Desktop Sidebar */
         .sidebar { width: 240px; background: #0b0c10; border-right: 1px solid var(--border); padding: 25px; display: flex; flex-direction: column; }
         .main { flex: 1; padding: 20px; overflow-y: auto; padding-bottom: 80px; background: radial-gradient(circle at top right, #141b24 0%, #050a10 100%); }
         .logo { color: var(--primary); font-size: 26px; font-weight: bold; text-align: center; margin-bottom: 40px; }
         
-        .menu-item { padding: 14px; cursor: pointer; color: #666; border-radius: 8px; margin-bottom: 6px; transition: 0.2s; display: flex; align-items: center; gap: 10px; }
-        .menu-item.active { background: #1a222d; color: #fff; border-left: 4px solid var(--primary); }
-        
-        /* Mobile Bottom Nav */
         .mobile-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: #0b0c10; border-top: 1px solid var(--border); justify-content: space-around; padding: 12px 0; z-index: 1000; }
-        .nav-icon { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: #666; cursor: pointer; }
+        .nav-icon { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: #555; cursor: pointer; }
         .nav-icon.active { color: var(--primary); }
-        .nav-icon i { font-size: 20px; margin-bottom: 3px; }
 
-        /* VIP Styling */
-        .tab-scroll { overflow-x: auto; display: flex; gap: 8px; margin-bottom: 20px; padding-bottom: 5px; -webkit-overflow-scrolling: touch; }
-        .tab { white-space: nowrap; background: #141b24; border: 1px solid var(--border); color: #888; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+        .tab-scroll { overflow-x: auto; display: flex; gap: 8px; margin-bottom: 20px; padding-bottom: 5px; }
+        .tab { white-space: nowrap; background: #141b24; border: 1px solid var(--border); color: #888; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
         .tab.active { background: var(--primary); color: #000; font-weight: bold; }
 
-        .match-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 12px; cursor: pointer; }
-        .match-card.open { border-color: var(--primary); }
-        .summary { display: flex; justify-content: space-between; font-size: 14px; }
+        /* VIP CARD - INTERACTIVE */
+        .match-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 12px; cursor: pointer; transition: 0.2s; position: relative; }
+        .match-card:hover { border-color: var(--primary); }
+        .match-card.open { border-color: var(--primary); background: #101620; }
+        
+        .summary { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+        .summary b { color: #fff; }
+        .summary .odds-prev { color: var(--primary); font-family: monospace; font-size: 12px; }
+
         .details { display: none; margin-top: 15px; border-top: 1px solid #1f2833; padding-top: 15px; }
-        .match-card.open .details { display: block; }
+        .match-card.open .details { display: block; animation: fadeIn 0.3s; }
+
+        /* Stats Grid */
+        .stats-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .team-col { background: #050a10; padding: 10px; border-radius: 8px; border: 1px solid #141b24; }
+        .team-name { font-size: 11px; color: #555; text-transform: uppercase; margin-bottom: 5px; display: block; }
+        .stat-item { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 3px; }
+        .stat-item b { color: var(--primary); }
 
         .prob-bar { display: flex; height: 6px; border-radius: 10px; overflow: hidden; background: #333; margin: 10px 0; }
         .p1 { background: var(--win); } .px { background: #555; } .p2 { background: var(--loss); }
         
-        .ticket-box { background: var(--card); border: 1px solid var(--primary); border-radius: 12px; padding: 20px; margin-bottom: 15px; }
-        .btn-main { background: var(--primary); color: #000; border: none; padding: 14px; border-radius: 50px; font-weight: bold; width: 100%; text-transform: uppercase; margin-top: 15px; }
+        .ai-verdict { background: rgba(102, 252, 241, 0.05); border-left: 2px solid var(--primary); padding: 12px; margin-top: 15px; border-radius: 4px; }
+        .ai-verdict p { margin: 0; font-size: 13px; font-style: italic; color: #eee; }
 
-        select { background: #141b24; color: #fff; border: 1px solid var(--border); padding: 12px; border-radius: 8px; width: 100%; margin-bottom: 15px; }
+        .ticket-box { background: var(--card); border: 1px solid var(--primary); border-radius: 12px; padding: 20px; max-width: 500px; margin: 0 auto; }
+        .btn-main { background: var(--primary); color: #000; border: none; padding: 14px; border-radius: 50px; font-weight: bold; width: 100%; text-transform: uppercase; margin-top: 15px; cursor: pointer; }
+        
+        select { background: #141b24; color: #fff; border: 1px solid var(--border); padding: 12px; border-radius: 8px; width: 100%; margin-bottom: 10px; font-family: inherit; }
 
-        .page { display: none; } .page.active { display: block; animation: fadeIn 0.3s; }
+        .page { display: none; } .page.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Media Queries for Mobile */
         @media (max-width: 768px) {
             .sidebar { display: none; }
             .mobile-nav { display: flex; }
             .main { padding: 15px; padding-bottom: 90px; }
-            .header h1 { font-size: 20px; }
-            .dash-grid { grid-template-columns: 1fr !important; }
         }
     </style>
 </head>
@@ -239,20 +244,20 @@ html_content = """
     <div class="header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
         <h1 id="p-title" style="margin:0; font-size:22px;">Dashboard</h1>
         <div style="text-align:right">
-            <span style="font-size:10px; color:#555; display:block">BANKROLL</span>
-            <b id="ui-bank" style="color:var(--primary); font-size: 18px;">€1000.00</b>
+            <span style="font-size:10px; color:#555;">BANKROLL</span>
+            <b id="ui-bank" style="color:var(--primary); font-size: 18px; display:block">€1000.00</b>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="home" class="page active">
-        <div class="dash-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
             <div style="background:var(--card); padding:15px; border-radius:10px; border:1px solid var(--border); text-align:center;">
                 <span style="color:#555; font-size:10px;">PROFIT</span>
                 <h3 style="color:var(--win); margin:5px 0;">+€452.10</h3>
             </div>
             <div style="background:var(--card); padding:15px; border-radius:10px; border:1px solid var(--border); text-align:center;">
-                <span style="color:#555; font-size:10px;">WIN RATE</span>
+                <span style="color:#555; font-size:10px;">SUCCESS</span>
                 <h3 style="color:var(--primary); margin:5px 0;">76%</h3>
             </div>
         </div>
@@ -267,10 +272,10 @@ html_content = """
             <div class="tab" onclick="setLeague('BL1', this)">Bundesliga</div>
             <div class="tab" onclick="setLeague('SA', this)">Serie A</div>
         </div>
-        <div id="match-list">Načítavam...</div>
+        <div id="match-list">Načítavam trhy...</div>
     </div>
 
-    <!-- TIKET DNA -->
+    <!-- DAILY -->
     <div id="daily" class="page"><div id="daily-ticket-out"></div></div>
 
     <!-- CUSTOM -->
@@ -279,7 +284,7 @@ html_content = """
             <h3 style="margin:0 0 15px 0; text-align:center; color:var(--primary)">GENERÁTOR</h3>
             <select id="gen-league"><option value="PL">Premier League</option><option value="PD">La Liga</option></select>
             <select id="gen-risk"><option value="low">Nízke riziko</option><option value="medium">Stredné riziko</option><option value="high">Vysoké riziko</option></select>
-            <button class="btn-main" onclick="generateSmartTicket()">GENEROVAŤ</button>
+            <button class="btn-main" onclick="generateSmartTicket()">VYGENEROVAŤ TIKET</button>
             <div id="gen-out" style="margin-top:20px"></div>
         </div>
     </div>
@@ -288,7 +293,6 @@ html_content = """
     <div id="history" class="page"><div id="hist-out"></div></div>
 </div>
 
-<!-- Bottom Nav for Mobile -->
 <div class="mobile-nav">
     <div class="nav-icon active" onclick="showPage('home', this)">🏠<span>Domov</span></div>
     <div class="nav-icon" onclick="showPage('analysis', this); loadAnalysis('PL')">📊<span>Analýzy</span></div>
@@ -311,14 +315,13 @@ function showPage(id, el) {
     document.querySelectorAll('.menu-item, .nav-icon').forEach(m => m.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     if(el) el.classList.add('active');
-    
     const titles = {'home':'Dashboard', 'analysis':'VIP Analýza', 'daily':'Tiket Dňa', 'custom':'Vlastný Tiket', 'history':'História'};
     document.getElementById('p-title').innerText = titles[id];
 }
 
 async function loadAnalysis(league) {
     const div = document.getElementById('match-list');
-    div.innerHTML = '<p style="text-align:center; color:var(--primary)">Sťahujem trhy...</p>';
+    div.innerHTML = '<p style="text-align:center; color:var(--primary)">Pripravujem štatistiky zápasov...</p>';
     const res = await fetch(`/api/analysis?league=${league}`);
     const matches = await res.json();
     let html = '';
@@ -327,29 +330,47 @@ async function loadAnalysis(league) {
         <div class="match-card" onclick="this.classList.toggle('open')">
             <div class="summary">
                 <b>${m.domaci} - ${m.hostia}</b>
-                <span style="color:var(--primary)">${m.o1.toFixed(2)} | ${m.ox.toFixed(2)} | ${m.o2.toFixed(2)}</span>
+                <div class="odds-prev">${m.o1.toFixed(2)} | ${m.ox.toFixed(2)} | ${m.o2.toFixed(2)}</div>
             </div>
             <div class="details">
-                <div style="display:flex; justify-content:space-between; font-size:11px; color:#555">
-                    <span>POZÍCIA: ${m.h_stat.pos} vs ${m.a_stat.pos}</span>
-                    <span>BODY: ${m.h_stat.points} : ${m.a_stat.points}</span>
+                <div class="stats-vs">
+                    <div class="team-col">
+                        <span class="team-name">${m.domaci}</span>
+                        <div class="stat-item">Pozícia: <b>#${m.h_stat.pos}</b></div>
+                        <div class="stat-item">Body: <b>${m.h_stat.points}</b></div>
+                        <div class="stat-item">Forma: <b>${m.h_stat.form}</b></div>
+                    </div>
+                    <div class="team-col">
+                        <span class="team-name">${m.hostia}</span>
+                        <div class="stat-item">Pozícia: <b>#${m.a_stat.pos}</b></div>
+                        <div class="stat-item">Body: <b>${m.a_stat.points}</b></div>
+                        <div class="stat-item">Forma: <b>${m.a_stat.form}</b></div>
+                    </div>
                 </div>
+                
+                <div style="font-size:10px; color:#555; text-transform:uppercase;">Pravdepodobnosť výhry (1 - X - 2)</div>
                 <div class="prob-bar">
                     <div class="p1" style="width:${m.probs['1']}%"></div>
                     <div class="px" style="width:${m.probs['X']}%"></div>
                     <div class="p2" style="width:${m.probs['2']}%"></div>
                 </div>
-                <p style="font-size:13px; font-style:italic; margin:10px 0; color:#fff">"${m.analyza}"</p>
+                <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:bold; color:var(--primary)">
+                    <span>${m.probs['1']}%</span><span>${m.probs['X']}%</span><span>${m.probs['2']}%</span>
+                </div>
+
+                <div class="ai-verdict">
+                    <span style="font-size:9px; color:var(--primary); font-weight:bold; display:block; margin-bottom:5px;">AI VERDIKT</span>
+                    <p>"${m.analyza}"</p>
+                </div>
             </div>
         </div>`;
     });
-    div.innerHTML = html || '<p style="text-align:center">Žiadne zápasy.</p>';
+    div.innerHTML = html || 'Dnes žiadne zápasy.';
 }
 
 function setLeague(code, el) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    el.classList.add('active');
-    loadAnalysis(code);
+    el.classList.add('active'); loadAnalysis(code);
 }
 
 async function loadDaily() {
@@ -365,14 +386,12 @@ async function generateSmartTicket() {
     div.innerHTML = 'Počítam...';
     const res = await fetch(`/api/generate-ticket?league=${document.getElementById('gen-league').value}&risk=${document.getElementById('gen-risk').value}`);
     const data = await res.json();
-    renderSlip(data, div, 'VYGENEROVANÝ TIKET');
+    renderSlip(data, div, 'VÁŠ TIKET');
 }
 
 function renderSlip(data, container, title) {
     if(!data.length) return container.innerHTML = 'Dáta chýbajú.';
-    let total = 1;
-    let rows = '';
-    let matches = [];
+    let total = 1; let rows = ''; let matches = [];
     data.forEach(m => {
         const odd = m.o1 < m.o2 ? m.o1 : m.o2;
         total *= odd;
@@ -381,21 +400,21 @@ function renderSlip(data, container, title) {
             <span><b>${m.domaci}</b></span><b>${odd.toFixed(2)}</b>
         </div>`;
     });
-    container.innerHTML = `<div class="ticket-box"><h4 style="margin:0 0 10px 0; text-align:center">${title}</h4>${rows}<div style="display:flex; justify-content:space-between; margin-top:15px; font-weight:bold"><span>CELKOVÝ KURZ</span><span style="color:var(--primary)">${total.toFixed(2)}</span></div><button class="btn-main" onclick="placeBet(${total.toFixed(2)}, '${matches.join(', ')}')">VSAĎIŤ €50</button></div>`;
+    container.innerHTML = `<div class="ticket-box"><h4 style="margin:0 0 10px 0; text-align:center">${title}</h4>${rows}<div style="display:flex; justify-content:space-between; margin-top:15px; font-weight:bold"><span>KURZ</span><span style="color:var(--primary)">${total.toFixed(2)}</span></div><button class="btn-main" onclick="placeBet(${total.toFixed(2)}, '${matches.join(', ')}')">VSAĎIŤ €50</button></div>`;
 }
 
 function placeBet(odds, matches) {
     if(bank < 50) return alert("Málo peňazí!");
     bank -= 50;
-    hist.unshift({ date: new Date().toLocaleString(), matches: matches, odds: odds.toFixed(2), status: 'V hre' });
-    updateUI(); alert("Tiket odoslaný!");
+    hist.unshift({ date: new Date().toLocaleString(), matches: matches, odds: odds.toFixed(2) });
+    updateUI(); alert("Tiket podaný!");
 }
 
 function renderHistory() {
     const div = document.getElementById('hist-out');
     if(!hist.length) return div.innerHTML = '<p style="text-align:center">Žiadna história.</p>';
-    let h = '<table style="width:100%; text-align:left; border-collapse:collapse; font-size:13px;">';
-    h += '<tr style="color:var(--primary); border-bottom:1px solid var(--border)"><th style="padding:10px">Čas</th><th>Zápasy</th><th>Kurz</th></tr>';
+    let h = '<table style="width:100%; text-align:left; border-collapse:collapse; font-size:12px;">';
+    h += '<tr style="color:var(--primary); border-bottom:1px solid #1f2833;"><th style="padding:10px">Čas</th><th>Tiket</th><th>Kurz</th></tr>';
     hist.forEach(t => h += `<tr style="border-bottom:1px solid #111"><td style="padding:10px; font-size:10px">${t.date}</td><td>${t.matches}</td><td style="color:var(--primary)">${t.odds}</td></tr>`);
     div.innerHTML = h + '</table>';
 }
@@ -406,11 +425,4 @@ updateUI();
 </script>
 </body>
 </html>
-"""
-
-@app.get("/", response_class=HTMLResponse)
-def home():
-    return html_content
-
-# Inštrukcia pre Render: uvicorn main:app --host 0.0.0.0 --port $PORT
 
